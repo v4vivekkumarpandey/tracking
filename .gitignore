@@ -1,0 +1,10 @@
+.env
+node_modules/
+.next/
+apps/web/next-env.d.ts
+apps/lite/next-env.d.ts
+.env.local
+tracking-lite.zip
+*.log
+hostinger-env.txt
+*.tsbuildinfo

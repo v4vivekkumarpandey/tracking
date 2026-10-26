@@ -1,0 +1,25 @@
+{
+  "name": "tracking-lite",
+  "private": true,
+  "description": "Affiliate tracker for shared hosting: one Next.js app + MySQL/MariaDB",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/clickid.test.ts"
+  },
+  "dependencies": {
+    "mysql2": "3.11.3",
+    "next": "14.2.25",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "20.16.11",
+    "@types/react": "18.3.11",
+    "@types/react-dom": "18.3.1",
+    "typescript": "5.6.3"
+  }
+}

@@ -1,0 +1,24 @@
+# Caddy gets and renews HTTPS certificates from Let's Encrypt automatically.
+# Domains come from .env (TRACKING_DOMAIN, ADMIN_DOMAIN, ACME_EMAIL).
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$TRACKING_DOMAIN} {
+	# Visitors could fake these headers to hide their IP or country. Remove
+	# them unless traffic really comes through Cloudflare's proxy; if you
+	# turn on the Cloudflare orange cloud, delete these two lines.
+	request_header -CF-Connecting-IP
+	request_header -CF-IPCountry
+
+	reverse_proxy tracker:8080
+}
+
+{$ADMIN_DOMAIN} {
+	# Optional: allow only your office/home IPs into the dashboard.
+	# @blocked not remote_ip 203.0.113.10 198.51.100.0/24
+	# respond @blocked 403
+
+	reverse_proxy web:3000
+}

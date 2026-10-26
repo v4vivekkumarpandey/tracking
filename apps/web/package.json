@@ -1,0 +1,24 @@
+{
+  "name": "tracking-web",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clickhouse/client": "1.7.0",
+    "next": "14.2.25",
+    "pg": "8.13.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "20.16.11",
+    "@types/pg": "8.11.10",
+    "@types/react": "18.3.11",
+    "@types/react-dom": "18.3.1",
+    "typescript": "5.6.3"
+  }
+}

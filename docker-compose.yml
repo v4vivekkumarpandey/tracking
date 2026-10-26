@@ -1,0 +1,126 @@
+name: tracking
+
+x-go-env: &go-env
+  POSTGRES_URL: postgres://tracking:${POSTGRES_PASSWORD:-tracking}@postgres:5432/tracking?sslmode=disable
+  CLICKHOUSE_ADDR: clickhouse:9000
+  CLICKHOUSE_DB: tracking
+  CLICKHOUSE_USER: tracking
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-tracking}
+  REDIS_ADDR: redis:6379
+  CLICK_SECRET: ${CLICK_SECRET:?Copy .env.example to .env and set CLICK_SECRET}
+  FALLBACK_URL: ${FALLBACK_URL:-}
+  TRUST_PROXY: ${TRUST_PROXY:-false}
+
+x-go-build: &go-build
+  context: .
+  dockerfile: services/go/Dockerfile
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tracking
+      POSTGRES_USER: tracking
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tracking}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tracking -d tracking"]
+      interval: 3s
+      retries: 20
+    restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    environment:
+      CLICKHOUSE_DB: tracking
+      CLICKHOUSE_USER: tracking
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-tracking}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - chdata:/var/lib/clickhouse
+      - ./db/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "127.0.0.1:8123:8123"
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping || exit 1"]
+      interval: 3s
+      retries: 30
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # volatile-lru: under memory pressure only keys with a TTL (cache, dedup)
+    # are evicted, never the spill lists that hold unsent clicks.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "volatile-lru"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build: *go-build
+    command: ["migrate"]
+    environment: *go-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  tracker:
+    build: *go-build
+    command: ["tracker"]
+    environment: *go-env
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      clickhouse: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  worker:
+    build: *go-build
+    command: ["worker"]
+    environment: *go-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      clickhouse: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  web:
+    build: ./apps/web
+    environment:
+      DATABASE_URL: postgres://tracking:${POSTGRES_PASSWORD:-tracking}@postgres:5432/tracking
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: tracking
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-tracking}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      TRACKING_BASE_URL: ${TRACKING_BASE_URL:-http://localhost:8080}
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
+    ports:
+      - "3000:3000"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      clickhouse: { condition: service_healthy }
+    restart: unless-stopped
+
+  # Local stand-in for a publisher's postback endpoint. Not for production.
+  httpbin:
+    image: mccutchen/go-httpbin:v2.15.0
+    ports:
+      - "127.0.0.1:8081:8080"
+
+volumes:
+  pgdata:
+  chdata:
+  redisdata:

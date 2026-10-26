@@ -1,0 +1,61 @@
+# Production overrides for a Hostinger VPS (or any Linux server).
+# Enable by adding this line to .env on the server:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+# after which plain `docker compose up -d --build` uses both files.
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "5" }
+
+services:
+  # Only Caddy is reachable from the internet (ports 80/443). The tracker and
+  # dashboard are reached through it; databases stay on 127.0.0.1.
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      TRACKING_DOMAIN: ${TRACKING_DOMAIN:?Set TRACKING_DOMAIN in .env}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?Set ADMIN_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [tracker, web]
+    logging: *logging
+
+  tracker:
+    ports: !reset []
+    environment:
+      TRUST_PROXY: "true"
+    logging: *logging
+
+  web:
+    ports: !reset []
+    environment:
+      SECURE_COOKIES: "true"
+    logging: *logging
+
+  worker:
+    logging: *logging
+
+  postgres:
+    logging: *logging
+
+  clickhouse:
+    logging: *logging
+
+  redis:
+    logging: *logging
+
+  # Local test endpoint only; never started in production.
+  httpbin:
+    profiles: ["dev"]
+
+volumes:
+  caddy_data:
+  caddy_config:
