@@ -8,9 +8,10 @@ export const METRIC_LABEL: Record<Metric, string> = {
   revenue: 'Revenue',
   payout: 'Payout',
   margin: 'Margin',
+  epc: 'EPC',
 };
 
-const MONEY: Metric[] = ['revenue', 'payout', 'margin'];
+const MONEY: Metric[] = ['revenue', 'payout', 'margin', 'epc'];
 
 export function fmtMetric(metric: Metric, v: number, currency: string, compact = false): string {
   if (metric === 'cvr') return `${v.toFixed(2)}%`;
@@ -19,7 +20,7 @@ export function fmtMetric(metric: Metric, v: number, currency: string, compact =
       style: 'currency',
       currency,
       notation: compact && Math.abs(v) >= 1000 ? 'compact' : 'standard',
-      maximumFractionDigits: compact && Math.abs(v) >= 1000 ? 1 : 2,
+      maximumFractionDigits: compact && Math.abs(v) >= 1000 ? 1 : metric === 'epc' ? 3 : 2,
     }).format(v);
   }
   return new Intl.NumberFormat('en-US', {

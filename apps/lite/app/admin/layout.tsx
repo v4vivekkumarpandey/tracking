@@ -1,35 +1,34 @@
 import { requireAdmin } from '@/lib/auth';
-import { logout } from './actions';
-import { NavLink } from './_components/NavLink';
-
-const BRAND = process.env.BRAND_NAME ?? 'Tracking';
+import { pendingCounts } from '@/lib/queue';
+import { Shell } from '../_components/Shell';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const email = await requireAdmin();
+  const pending = await pendingCounts();
   return (
-    <div className="shell">
-      <nav className="nav" aria-label="Main">
-        <div className="brand">
-          <span className="brand-name">{BRAND}</span>
-          <span className="brand-sub">Affiliate platform</span>
-        </div>
-        <NavLink href="/admin" icon="dashboard">Dashboard</NavLink>
-
-        <div className="nav-section">Manage</div>
-        <NavLink href="/admin/offers" icon="offers">Offers</NavLink>
-        <NavLink href="/admin/advertisers" icon="advertisers">Advertisers</NavLink>
-        <NavLink href="/admin/publishers" icon="publishers">Publishers</NavLink>
-
-        <div className="nav-section">Analyze</div>
-        <NavLink href="/admin/reports" icon="reports">Reporting</NavLink>
-        <NavLink href="/admin/conversions" icon="conversions">Conversions</NavLink>
-
-        <form action={logout} className="nav-foot">
-          <p className="muted">{email}</p>
-          <button className="secondary small" type="submit">Sign out</button>
-        </form>
-      </nav>
-      <main className="content">{children}</main>
-    </div>
+    <Shell
+      panel="Admin panel"
+      user={email}
+      sections={[
+        { links: [
+          { href: '/admin', icon: 'dashboard', label: 'Dashboard', exact: true },
+          { href: '/admin/requests', icon: 'requests', label: 'Approvals', badge: pending.total },
+        ] },
+        { title: 'Manage', links: [
+          { href: '/admin/offers', icon: 'offers', label: 'Offers' },
+          { href: '/admin/advertisers', icon: 'advertisers', label: 'Advertisers' },
+          { href: '/admin/publishers', icon: 'publishers', label: 'Publishers' },
+        ] },
+        { title: 'Analyze', links: [
+          { href: '/admin/reports', icon: 'reports', label: 'Reporting' },
+          { href: '/admin/conversions', icon: 'conversions', label: 'Conversions' },
+        ] },
+        { title: 'Finance', links: [
+          { href: '/admin/payments', icon: 'payments', label: 'Payments' },
+        ] },
+      ]}
+    >
+      {children}
+    </Shell>
   );
 }

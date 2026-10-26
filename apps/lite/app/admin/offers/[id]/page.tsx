@@ -3,10 +3,10 @@ import { notFound } from 'next/navigation';
 import { requireAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { CURRENCY, money, trackingBase } from '@/lib/format';
-import { addGoal, approvePublisher, revokePublisher, setOfferStatus } from '../../actions';
+import { addGoal, approvePublisher, rejectAccess, reviewOffer, revokePublisher, setOfferStatus, setOfferVisibility } from '../../actions';
 
 type Offer = {
-  id: number; name: string; advertiser: string; postback_secret: string;
+  id: number; name: string; advertiser: string; postback_secret: string; visibility: string; description: string | null;
   destination_url: string; payout_model: string; status: string; attribution_days: number;
   default_revenue: string; default_payout: string; revenue_percent: string | null; payout_percent: string | null;
 };
@@ -52,8 +52,30 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           <span>Attribution: <strong>{o.attribution_days} days</strong></span>
         </div>
         <div>Destination: <code>{o.destination_url}</code></div>
+        {o.description && <div className="muted wrap">{o.description}</div>}
+        {o.status === 'pending' && (
+          <div className="notice">
+            <strong>Submitted by the advertiser.</strong> Set the publisher payout and approve to make it live.
+            <form action={reviewOffer} className="row" style={{ marginTop: 8 }}>
+              <input type="hidden" name="id" value={o.id} />
+              {o.revenue_percent
+                ? <label>Payout % of sale<input name="payout_percent" inputMode="decimal" required style={{ width: 100 }} /></label>
+                : <label>Payout per conversion ({CURRENCY})<input name="default_payout" inputMode="decimal" required style={{ width: 100 }} /></label>}
+              <input type="hidden" name="decision" value="approve" />
+              <button className="small">Approve offer</button>
+            </form>
+          </div>
+        )}
         <div className="row">
-          {(['active', 'paused', 'archived'] as const).filter((s) => s !== o.status).map((s) => (
+          <form action={setOfferVisibility} className="inline">
+            <input type="hidden" name="id" value={o.id} />
+            <input type="hidden" name="visibility" value={o.visibility === 'public' ? 'private' : 'public'} />
+            <span className={`badge ${o.visibility === 'public' ? 'active' : 'paused'}`}>{o.visibility}</span>{' '}
+            <button className="secondary small" title={o.visibility === 'public' ? 'Hide from the publisher marketplace' : 'Show in the publisher marketplace'}>
+              {o.visibility === 'public' ? 'Make private' : 'Make public'}
+            </button>
+          </form>
+          {(['active', 'paused', 'archived'] as const).filter((s) => s !== o.status && !(o.status === 'pending' && s === 'active')).map((s) => (
             <form key={s} action={setOfferStatus} className="inline">
               <input type="hidden" name="id" value={o.id} />
               <input type="hidden" name="status" value={s} />
@@ -89,7 +111,21 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                   <td><span className={`badge ${a.status}`}>{a.status}</span></td>
                   <td className="num">{a.payout_override ? money(a.payout_override) : '–'}</td>
                   <td>{a.code ? <code>{base}/c/{a.code}?sub1=</code> : '–'}</td>
-                  <td>
+                  <td className="actions">
+                    {a.status !== 'approved' && (
+                      <form action={approvePublisher} className="inline">
+                        <input type="hidden" name="offer_id" value={o.id} />
+                        <input type="hidden" name="publisher_id" value={a.publisher_id} />
+                        <button className="small">Approve</button>
+                      </form>
+                    )}
+                    {a.status === 'pending' && (
+                      <form action={rejectAccess} className="inline">
+                        <input type="hidden" name="offer_id" value={o.id} />
+                        <input type="hidden" name="publisher_id" value={a.publisher_id} />
+                        <button className="danger small">Reject</button>
+                      </form>
+                    )}
                     {a.status === 'approved' && (
                       <form action={revokePublisher} className="inline">
                         <input type="hidden" name="offer_id" value={o.id} />

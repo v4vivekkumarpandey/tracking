@@ -1,13 +1,13 @@
 'use server';
 
 import { randomBytes } from 'node:crypto';
-import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { audit, exec } from '@/lib/db';
+import { audit, exec, q } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
 import { clearLinkCache } from '@/lib/links';
-import { SESSION_COOKIE } from '@/lib/session';
+import { hashPassword, tempPassword } from '@/lib/password';
+import { assertPublicUrl } from '@/lib/safeUrl';
 
 function str(fd: FormData, k: string): string {
   return String(fd.get(k) ?? '').trim();
@@ -37,11 +37,6 @@ function httpURL(v: string): string {
 }
 function randomToken(len: number, chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'): string {
   return Array.from(randomBytes(len), (b) => chars[b % chars.length]).join('');
-}
-
-export async function logout() {
-  (await cookies()).delete(SESSION_COOKIE);
-  redirect('/login');
 }
 
 export async function createAdvertiser(fd: FormData) {
@@ -163,9 +158,11 @@ export async function addPostback(fd: FormData) {
   const me = await requireAdmin();
   const pid = id(fd, 'publisher_id');
   const offerId = str(fd, 'offer_id') ? id(fd, 'offer_id') : null;
+  const url = str(fd, 'url');
+  await assertPublicUrl(url);
   await exec(
     `INSERT INTO publisher_postbacks (publisher_id, offer_id, goal, url) VALUES (?, ?, ?, ?)`,
-    [pid, offerId, optStr(fd, 'goal'), httpURL(str(fd, 'url'))],
+    [pid, offerId, optStr(fd, 'goal'), url],
   );
   await audit(me, 'add_postback', 'publisher', pid);
   revalidatePath(`/admin/publishers/${pid}`);
@@ -189,4 +186,108 @@ export async function setConversionStatus(fd: FormData) {
   );
   await audit(me, 'set_status', 'conversion', cid, { status });
   revalidatePath('/admin/conversions');
+}
+
+// ---------- Approvals ----------
+
+export async function setAdvertiserStatus(fd: FormData) {
+  const me = await requireAdmin();
+  const aid = id(fd);
+  const status = oneOf(str(fd, 'status'), ['pending', 'active', 'paused'] as const);
+  await exec(`UPDATE advertisers SET status = ? WHERE id = ?`, [status, aid]);
+  await audit(me, 'set_status', 'advertiser', aid, { status });
+  revalidatePath('/admin', 'layout');
+}
+
+/** Activates (or rejects) an offer an advertiser submitted, setting the publisher payout. */
+export async function reviewOffer(fd: FormData) {
+  const me = await requireAdmin();
+  const oid = id(fd);
+  const decision = oneOf(str(fd, 'decision'), ['approve', 'reject'] as const);
+  if (decision === 'approve') {
+    const payout = optNum(fd, 'default_payout');
+    const pct = optNum(fd, 'payout_percent');
+    await exec(
+      `UPDATE offers SET status = 'active', updated_at = NOW(3),
+              default_payout = COALESCE(?, default_payout), payout_percent = COALESCE(?, payout_percent)
+       WHERE id = ? AND status = 'pending'`,
+      [payout, pct, oid],
+    );
+  } else {
+    await exec(`UPDATE offers SET status = 'archived', updated_at = NOW(3) WHERE id = ? AND status = 'pending'`, [oid]);
+  }
+  await audit(me, `offer_${decision}`, 'offer', oid);
+  clearLinkCache();
+  revalidatePath('/admin', 'layout');
+}
+
+export async function setOfferVisibility(fd: FormData) {
+  const me = await requireAdmin();
+  const oid = id(fd);
+  const visibility = oneOf(str(fd, 'visibility'), ['public', 'private'] as const);
+  await exec(`UPDATE offers SET visibility = ?, updated_at = NOW(3) WHERE id = ?`, [visibility, oid]);
+  await audit(me, 'set_visibility', 'offer', oid, { visibility });
+  revalidatePath(`/admin/offers/${oid}`);
+}
+
+export async function rejectAccess(fd: FormData) {
+  const me = await requireAdmin();
+  const oid = id(fd, 'offer_id');
+  const pid = id(fd, 'publisher_id');
+  await exec(`UPDATE publisher_offer_access SET status = 'rejected' WHERE offer_id = ? AND publisher_id = ? AND status = 'pending'`, [oid, pid]);
+  await audit(me, 'reject_access', 'publisher_offer_access', oid, { publisher_id: pid });
+  revalidatePath('/admin', 'layout');
+}
+
+// ---------- Logins ----------
+
+export type ResetState = { password?: string; email?: string; error?: string } | null;
+
+/**
+ * Sets a new temporary password for an advertiser's or publisher's login,
+ * creating the login if the account was added by an admin. Existing sessions
+ * are signed out. The password is returned once, for the admin to pass on.
+ */
+export async function resetLogin(_: ResetState, fd: FormData): Promise<ResetState> {
+  const me = await requireAdmin();
+  const role = oneOf(str(fd, 'role'), ['publisher', 'advertiser'] as const);
+  const eid = id(fd);
+  const table = role === 'publisher' ? 'publishers' : 'advertisers';
+  const col = role === 'publisher' ? 'publisher_id' : 'advertiser_id';
+  const [entity] = await q<{ email: string | null }>(`SELECT email FROM ${table} WHERE id = ?`, [eid]);
+  if (!entity) return { error: 'Account not found.' };
+
+  const password = tempPassword();
+  const hash = await hashPassword(password);
+  const [user] = await q<{ id: number; email: string }>(`SELECT id, email FROM users WHERE ${col} = ?`, [eid]);
+  if (user) {
+    await exec(`UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?`, [hash, user.id]);
+  } else {
+    const email = (entity.email ?? '').toLowerCase();
+    if (!email) return { error: 'Add an email address to this account first.' };
+    try {
+      await exec(`INSERT INTO users (email, password_hash, role, ${col}) VALUES (?, ?, ?, ?)`, [email, hash, role, eid]);
+    } catch {
+      return { error: `Another login already uses ${email}.` };
+    }
+  }
+  await audit(me, 'reset_login', role, eid);
+  return { password, email: user?.email ?? entity.email ?? '' };
+}
+
+// ---------- Payments ----------
+
+export async function recordPayment(fd: FormData) {
+  const me = await requireAdmin();
+  const pid = id(fd, 'publisher_id');
+  const amount = optNum(fd, 'amount');
+  if (!amount || Number(amount) <= 0) throw new Error('amount must be positive');
+  const date = (k: string) => (/^\d{4}-\d{2}-\d{2}$/.test(str(fd, k)) ? str(fd, k) : null);
+  const res = await exec(
+    `INSERT INTO payments (publisher_id, amount, method, reference, period_from, period_to, note) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [pid, amount, oneOf(str(fd, 'method'), ['paypal', 'wise', 'bank', 'crypto', 'other'] as const),
+     optStr(fd, 'reference'), date('period_from'), date('period_to'), optStr(fd, 'note')],
+  );
+  await audit(me, 'record_payment', 'publisher', pid, { payment_id: res.insertId, amount });
+  revalidatePath('/admin', 'layout');
 }

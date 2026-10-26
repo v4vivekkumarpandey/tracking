@@ -118,8 +118,10 @@ function log(clickId: string, source: string, ip: string, params: URLSearchParam
   params.forEach((v, k) => {
     if (k !== 'secret') p[k] = v;
   });
+  // Only a validly signed click ID tells us the offer (and so the advertiser).
+  const offerId = parseClickId(clickId)?.offerId ?? null;
   exec(
-    `INSERT INTO postback_log (click_id, source, ip, params, status, message) VALUES (?, ?, ?, ?, ?, ?)`,
-    [clickId.slice(0, 64), source, ip, JSON.stringify(p), status, message.slice(0, 255) || null],
+    `INSERT INTO postback_log (click_id, offer_id, source, ip, params, status, message) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [clickId.slice(0, 64), offerId, source, ip, JSON.stringify(p), status, message.slice(0, 255) || null],
   ).catch((e) => console.error('postback_log insert', e));
 }

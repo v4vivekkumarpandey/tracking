@@ -13,6 +13,20 @@ It runs the same tracker as the VPS version: signed click IDs, S2S postbacks and
 
 Click IDs use the same format in both versions. With the same `CLICK_SECRET`, you can move to the VPS later and clicks still in their attribution window keep converting.
 
+## The three panels
+
+| Panel | Address | Who signs in | What they can do |
+|---|---|---|---|
+| **Admin** | `/admin` | You (`ADMIN_EMAIL` / `ADMIN_PASSWORD`) | Everything, plus **Approvals** (new sign-ups, offer access requests, offers submitted by advertisers) and **Payments** (balances owed, record payouts) |
+| **Advertiser** | `/advertiser` | Brands that signed up at `/signup/advertiser` | Stats for their own offers, **approve/reject** their conversions, **submit offers** (go live after you approve them and set the publisher payout), integration guide with their postback secret and a log of the postbacks they sent |
+| **Publisher** | `/publisher` | Affiliates who signed up at `/signup/publisher` | **Offer marketplace** (request access → you approve → they get a tracking link), stats by day/offer/sub ID, their conversions (payout only), their **own postback URLs** (with a test button), **payment details**, balance and payment history |
+
+- Everyone signs in at `/login`, and the site sends each person to their own panel.
+- New sign-ups stay **pending** until you approve them in **Admin → Approvals**. The red badge in the sidebar counts what's waiting.
+- Advertisers never see publisher identities or payouts, only "Publisher #id". Publishers never see revenue, your margin or advertisers' order IDs.
+- Accounts you create yourself in the admin panel: click **Create login** next to them to generate a temporary password to send them. Forgotten passwords work the same way: **Reset password**. Sending email isn't built in yet.
+- Put **Join as a publisher** (`https://trk.ossaward.org/signup/publisher`) and **Advertise with us** (`/signup/advertiser`) links on your main website.
+
 > hPanel menu names change from time to time. If a label below doesn't match exactly, look for the closest one.
 
 ---
@@ -74,6 +88,9 @@ hPanel → **Websites** → **Add website** → **Node.js app** (it may say "Web
 | `CURRENCY` | `USD` |
 | `DISPLAY_TIMEZONE` | e.g. `America/New_York` or `UTC` |
 | `SECURE_COOKIES` | `true` |
+| `BRAND_NAME` | your network's name, shown on login, sign-up and the panels (e.g. `OSS Award`) |
+
+Never set `ALLOW_PRIVATE_POSTBACKS` on Hostinger. It's a local-testing switch that turns off the check stopping publisher postback URLs from pointing at internal addresses.
 
 6. **Deploy.** The build takes a few minutes. Make sure SSL is enabled for the subdomain (hPanel → Security → SSL); Hostinger usually adds it automatically.
 

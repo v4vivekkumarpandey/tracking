@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE } from './lib/session';
 
-// Fast redirect for visitors with no session cookie. Signature checks happen
-// server-side in requireAdmin(), so this is a convenience, not the guard.
+// Fast redirect for visitors with no session cookie. Signature, role and
+// account-status checks happen server-side in lib/auth.ts, so this is a
+// convenience, not the guard.
 export function middleware(req: NextRequest) {
   if (!req.cookies.get(SESSION_COOKIE)) {
     return NextResponse.redirect(new URL('/login', req.url));
@@ -10,4 +11,4 @@ export function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: ['/admin/:path*'] };
+export const config = { matcher: ['/admin/:path*', '/publisher/:path*', '/advertiser/:path*'] };

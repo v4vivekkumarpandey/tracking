@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { exec, q } from './db';
+import { assertPublicUrl } from './safeUrl';
 
 const MAX_ATTEMPTS = 8;
 let running = false;
@@ -58,24 +59,39 @@ export async function processOutbox(maxJobs = 200): Promise<{ sent: number; fail
 
 /** Returns an error message, or null on a 2xx response. */
 async function send(conversionId: number, url: string): Promise<string | null> {
+  const { status, body, error } = await deliver(url);
+  await exec(
+    `INSERT INTO postback_deliveries (conversion_id, url, status_code, response, error) VALUES (?, ?, ?, ?, ?)`,
+    [conversionId, url, status, body, status === null ? error : null],
+  ).catch((e) => console.error('postback_deliveries insert', e));
+  return error;
+}
+
+/** Makes one postback request (also used by the publisher "Send test" button). */
+export async function deliver(url: string): Promise<{ status: number | null; body: string; error: string | null }> {
   let status: number | null = null;
   let body = '';
   let error: string | null = null;
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'tracking-postback/1.0' },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(10_000),
-    });
+    // Follow up to 3 redirects by hand so every hop passes the SSRF check.
+    let target = url;
+    let res: Response;
+    for (let hop = 0; ; hop++) {
+      await assertPublicUrl(target);
+      res = await fetch(target, {
+        headers: { 'User-Agent': 'tracking-postback/1.0' },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10_000),
+      });
+      const next = res.headers.get('location');
+      if (res.status < 300 || res.status > 399 || !next || hop >= 3) break;
+      target = new URL(next, target).toString();
+    }
     status = res.status;
     body = (await res.text()).slice(0, 1024);
     if (status < 200 || status > 299) error = `publisher postback returned ${status}`;
   } catch (e) {
     error = (e as Error).message.slice(0, 250);
   }
-  await exec(
-    `INSERT INTO postback_deliveries (conversion_id, url, status_code, response, error) VALUES (?, ?, ?, ?, ?)`,
-    [conversionId, url, status, body, status === null ? error : null],
-  ).catch((e) => console.error('postback_deliveries insert', e));
-  return error;
+  return { status, body, error };
 }

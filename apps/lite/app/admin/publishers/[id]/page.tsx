@@ -2,19 +2,29 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
-import { dateTime, trackingBase } from '@/lib/format';
+import { balances, paymentHistory } from '@/lib/balance';
+import { dateTime, money, trackingBase } from '@/lib/format';
 import { addPostback, deletePostback, setPublisherStatus } from '../../actions';
+import { RecordPayment } from '../../RecordPayment';
+import { ResetLogin } from '../../ResetLogin';
+
+type Pub = {
+  id: number; name: string; company: string | null; email: string | null; country: string | null; website: string | null;
+  traffic_sources: string | null; tax_id: string | null; payout_method: string | null; payout_details: string | null;
+  status: string; kyc_status: string; created_at: Date; login: string | null; last_login_at: Date | null;
+};
 
 export default async function PublisherPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
   const pid = Number((await params).id);
   if (!Number.isInteger(pid)) notFound();
-  const [p] = await q<{ id: number; name: string; email: string | null; status: string; kyc_status: string }>(
-    `SELECT id, name, email, status, kyc_status FROM publishers WHERE id = ?`, [pid],
+  const [p] = await q<Pub>(
+    `SELECT p.*, u.email AS login, u.last_login_at FROM publishers p
+     LEFT JOIN users u ON u.publisher_id = p.id WHERE p.id = ?`, [pid],
   );
   if (!p) notFound();
 
-  const [postbacks, links, offers, deliveries] = await Promise.all([
+  const [postbacks, links, offers, deliveries, [bal], history] = await Promise.all([
     q<{ id: number; url: string; offer_name: string | null; goal: string | null }>(
       `SELECT pb.id, pb.url, o.name AS offer_name, pb.goal FROM publisher_postbacks pb
        LEFT JOIN offers o ON o.id = pb.offer_id
@@ -32,20 +42,33 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
        JOIN conversions c ON c.id = d.conversion_id
        WHERE c.publisher_id = ? ORDER BY d.id DESC LIMIT 20`, [pid],
     ),
+    balances(pid),
+    paymentHistory(pid),
   ]);
 
   return (
     <>
+      <div className="crumb"><Link href="/admin/publishers">Publishers</Link></div>
       <h1>{p.name} <span className={`badge ${p.status}`}>{p.status}</span></h1>
-      <div className="card row">
-        <span className="muted">{p.email} · KYC {p.kyc_status}</span>
-        {(['active', 'blocked'] as const).filter((s) => s !== p.status).map((s) => (
-          <form key={s} action={setPublisherStatus} className="inline">
-            <input type="hidden" name="id" value={p.id} />
-            <input type="hidden" name="status" value={s} />
-            <button className={s === 'blocked' ? 'danger small' : 'small'}>{s === 'blocked' ? 'Block' : 'Activate'}</button>
-          </form>
-        ))}
+      <div className="card stack">
+        <div className="row">
+          {(['active', 'blocked'] as const).filter((s) => s !== p.status).map((s) => (
+            <form key={s} action={setPublisherStatus} className="inline">
+              <input type="hidden" name="id" value={p.id} />
+              <input type="hidden" name="status" value={s} />
+              <button className={s === 'blocked' ? 'danger small' : 'small'}>{s === 'blocked' ? 'Block' : p.status === 'pending' ? 'Approve' : 'Activate'}</button>
+            </form>
+          ))}
+          <ResetLogin role="publisher" id={p.id} hasLogin={!!p.login} />
+        </div>
+        <dl className="facts">
+          <dt>Login</dt><dd>{p.login ?? <span className="muted">none</span>}{p.last_login_at && <span className="muted"> · last sign-in {dateTime(p.last_login_at)}</span>}</dd>
+          <dt>Contact</dt><dd>{[p.company, p.email, p.country].filter(Boolean).join(' · ') || '–'}</dd>
+          <dt>Website</dt><dd>{p.website ? <a href={p.website} target="_blank" rel="noreferrer noopener">{p.website}</a> : '–'}</dd>
+          <dt>Traffic</dt><dd className="wrap">{p.traffic_sources || '–'}</dd>
+          <dt>Payment</dt><dd>{p.payout_method ? <><strong>{p.payout_method}</strong> <span className="mono">{p.payout_details}</span></> : <span className="muted">not provided</span>}{p.tax_id && <span className="muted"> · tax ID {p.tax_id}</span>}</dd>
+          <dt>Joined</dt><dd>{dateTime(p.created_at)}</dd>
+        </dl>
       </div>
 
       <div className="card">
@@ -113,6 +136,29 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
                 <td><code>{d.url}</code></td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card table-wrap">
+        <h2>Payments</h2>
+        {bal && (
+          <p>
+            Approved {money(bal.approved)} − paid {money(bal.paid)} = <strong>balance {money(bal.balance)}</strong>
+            <span className="muted"> · pending {money(bal.pending)}</span>
+          </p>
+        )}
+        <RecordPayment publisherId={p.id} amount={bal?.balance ?? 0} method={p.payout_method} />
+        <table style={{ marginTop: 12 }}>
+          <thead><tr><th>Date</th><th>Method</th><th>Reference</th><th className="num">Amount</th></tr></thead>
+          <tbody>
+            {history.map((h) => (
+              <tr key={h.id}>
+                <td>{dateTime(h.paid_at)}</td><td>{h.method}</td><td className="mono">{h.reference}</td>
+                <td className="num">{money(h.amount)}</td>
+              </tr>
+            ))}
+            {history.length === 0 && <tr><td colSpan={4} className="muted">No payments yet.</td></tr>}
           </tbody>
         </table>
       </div>
