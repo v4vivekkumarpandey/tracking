@@ -12,7 +12,15 @@ function fallback() {
 }
 
 // GET /c/{code}?source_id=..&sub1=..&sub10=..[&lp=page id][&url=deep link]  ->  302 to the offer (or its fallback).
-export async function GET(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ code: string }> }) {
+  const t0 = performance.now();
+  const res = await handle(req, ctx);
+  // Time spent in the app, visible in browser dev tools (excludes network).
+  res.headers.set('Server-Timing', `app;dur=${(performance.now() - t0).toFixed(1)}`);
+  return res;
+}
+
+async function handle(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   let link;
   try {
     link = await getLink((await params).code);
