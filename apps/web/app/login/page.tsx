@@ -1,6 +1,7 @@
 import { login } from './actions';
 
-export default function LoginPage({ searchParams }: { searchParams: { error?: string } }) {
+export default async function LoginPage(props: { searchParams: Promise<{ error?: string }> }) {
+  const searchParams = await props.searchParams;
   return (
     <main className="login">
       <form action={login} className="card stack">

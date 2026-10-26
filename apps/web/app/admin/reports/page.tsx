@@ -19,8 +19,9 @@ type Row = {
 
 const dateRe = /^\d{4}-\d{2}-\d{2}$/;
 
-export default async function Reports({ searchParams }: { searchParams: { from?: string; to?: string; group?: string } }) {
+export default async function Reports(props: { searchParams: Promise<{ from?: string; to?: string; group?: string }> }) {
   await requireAdmin();
+  const searchParams = await props.searchParams;
   const today = new Date();
   const from = dateRe.test(searchParams.from ?? '') ? searchParams.from! : isoDate(new Date(today.getTime() - 6 * 86400_000));
   const to = dateRe.test(searchParams.to ?? '') ? searchParams.to! : isoDate(today);

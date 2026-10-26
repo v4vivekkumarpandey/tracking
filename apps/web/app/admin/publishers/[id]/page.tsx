@@ -5,9 +5,9 @@ import { q } from '@/lib/db';
 import { dateTime, trackingBase } from '@/lib/format';
 import { addPostback, deletePostback, setPublisherStatus } from '../../actions';
 
-export default async function PublisherPage({ params }: { params: { id: string } }) {
+export default async function PublisherPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
-  const pid = Number(params.id);
+  const pid = Number((await params).id);
   if (!Number.isInteger(pid)) notFound();
   const [p] = await q<{ id: string; name: string; email: string | null; status: string; kyc_status: string }>(
     `SELECT id, name, email, status, kyc_status FROM publishers WHERE id = $1`, [pid],

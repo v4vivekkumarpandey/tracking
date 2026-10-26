@@ -12,9 +12,10 @@ type Conversion = {
 
 const STATUSES = ['pending', 'approved', 'rejected'] as const;
 
-export default async function Conversions({ searchParams }: { searchParams: { status?: string } }) {
+export default async function Conversions({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   await requireAdmin();
-  const status = STATUSES.find((s) => s === searchParams.status) ?? null;
+  const sp = await searchParams;
+  const status = STATUSES.find((s) => s === sp.status) ?? null;
   const rows = await q<Conversion>(
     `SELECT c.id, c.created_at, c.click_time, c.offer_id, o.name AS offer, c.publisher_id, p.name AS publisher,
             c.goal, c.txn_id, c.amount, c.revenue, c.payout, c.status, c.source, c.sub1, c.reject_reason

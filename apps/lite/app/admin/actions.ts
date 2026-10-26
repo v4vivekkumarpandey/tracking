@@ -40,7 +40,7 @@ function randomToken(len: number, chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLM
 }
 
 export async function logout() {
-  cookies().delete(SESSION_COOKIE);
+  (await cookies()).delete(SESSION_COOKIE);
   redirect('/login');
 }
 

@@ -20,7 +20,7 @@ export async function login(fd: FormData) {
     timingSafeEqual(digest(password), digest(wantPassword));
   if (!ok) redirect('/login?error=1');
 
-  cookies().set(SESSION_COOKIE, await createSession(email), {
+  (await cookies()).set(SESSION_COOKIE, await createSession(email), {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.SECURE_COOKIES === 'true',

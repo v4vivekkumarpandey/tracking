@@ -44,7 +44,7 @@ function linkCode(): string {
 }
 
 export async function logout() {
-  cookies().delete(SESSION_COOKIE);
+  (await cookies()).delete(SESSION_COOKIE);
   redirect('/login');
 }
 

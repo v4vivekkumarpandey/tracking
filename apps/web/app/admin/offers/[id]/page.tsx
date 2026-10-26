@@ -11,9 +11,9 @@ type Offer = {
   default_revenue: string; default_payout: string; revenue_percent: string | null; payout_percent: string | null;
 };
 
-export default async function OfferPage({ params }: { params: { id: string } }) {
+export default async function OfferPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
-  const oid = Number(params.id);
+  const oid = Number((await params).id);
   if (!Number.isInteger(oid)) notFound();
   const [o] = await q<Offer>(
     `SELECT o.*, a.name AS advertiser, a.postback_secret FROM offers o

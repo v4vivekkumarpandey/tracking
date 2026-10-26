@@ -48,7 +48,7 @@ code, .mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
 
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 18px; }
 .stack { display: flex; flex-direction: column; gap: 10px; }
-.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
 .stat .label { color: var(--muted); font-size: 12px; }
