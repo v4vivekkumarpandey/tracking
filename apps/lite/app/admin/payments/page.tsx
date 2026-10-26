@@ -19,7 +19,7 @@ export default async function Payments() {
   return (
     <>
       <div className="crumb">Finance</div>
-      <h1>Publisher payments</h1>
+      <div className="title-row"><h1>Publisher payments</h1><a href="/export/admin/payments" className="button secondary-button">Download CSV</a></div>
       <p className="muted">
         Balance = approved earnings − payments recorded. Pay through PayPal, Wise or bank, then record it here so the publisher sees it.
       </p>

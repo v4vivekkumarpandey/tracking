@@ -3,16 +3,17 @@
 import Link from 'next/link';
 import { useState } from 'react';
 
-/** Builds the publisher's tracking link: domain choice + optional sub IDs, with a copy button. */
-export function LinkBuilder({ path, domains }: { path: string; domains: { base: string; label: string }[] }) {
+/** Builds the publisher's tracking link: domain choice, optional deep link and sub IDs, with a copy button. */
+export function LinkBuilder({ path, domains, deeplinkHost }: {
+  path: string; domains: { base: string; label: string }[]; deeplinkHost: string | null;
+}) {
   const [base, setBase] = useState(domains[0].base);
   const [subs, setSubs] = useState(['', '', '', '', '']);
+  const [deep, setDeep] = useState('');
   const [copied, setCopied] = useState(false);
-  const qs = subs
-    .map((v, i) => (v ? `sub${i + 1}=${encodeURIComponent(v)}` : ''))
-    .filter(Boolean)
-    .join('&');
-  const url = `${base}${path}${qs ? `?${qs}` : ''}`;
+  const params = subs.map((v, i) => (v ? `sub${i + 1}=${encodeURIComponent(v)}` : '')).filter(Boolean);
+  if (deeplinkHost && deep.trim()) params.push(`url=${encodeURIComponent(deep.trim())}`);
+  const url = `${base}${path}${params.length ? `?${params.join('&')}` : ''}`;
 
   async function copy() {
     await navigator.clipboard.writeText(url);
@@ -35,6 +36,12 @@ export function LinkBuilder({ path, domains }: { path: string; domains: { base: 
       </label>
       {domains.length === 1 && (
         <p className="muted">Want links on your own domain? <Link href="/publisher/domains">Add a tracking domain</Link>.</p>
+      )}
+      {deeplinkHost && (
+        <label>
+          <span>Deep link (optional): send visitors to a specific page on <code>{deeplinkHost}</code> instead of the default landing page</span>
+          <input name="deeplink" type="url" value={deep} onChange={(e) => setDeep(e.target.value)} placeholder={`https://${deeplinkHost}/product/…`} />
+        </label>
       )}
       <p className="muted">
         Optional sub IDs travel with each click and come back in your reports and postbacks. Put your own click ID or

@@ -14,8 +14,9 @@ export default async function AdvertiserConversions(props: { searchParams: Promi
   const me = await requireAdvertiser();
   const sp = await props.searchParams;
   const status = STATUSES.find((s) => s === sp.status) ?? null;
-  const rows = await q<{ id: number; created_at: Date; offer_id: number; offer: string; publisher_id: number; goal: string; txn_id: string; amount: string; revenue: string; status: string; reject_reason: string | null }>(
-    `SELECT c.id, c.created_at, c.offer_id, o.name AS offer, c.publisher_id, c.goal, c.txn_id, c.amount, c.revenue, c.status, c.reject_reason
+  const rows = await q<{ id: number; created_at: Date; offer_id: number; offer: string; publisher_id: number; goal: string; txn_id: string; amount: string; revenue: string; status: string; reject_reason: string | null; approved_by: string | null; auto_at: Date | null }>(
+    `SELECT c.id, c.created_at, c.offer_id, o.name AS offer, c.publisher_id, c.goal, c.txn_id, c.amount, c.revenue, c.status, c.reject_reason,
+            c.approved_by, IF(o.auto_approve_days IS NULL OR c.fraud_score >= 70, NULL, c.created_at + INTERVAL o.auto_approve_days DAY) AS auto_at
      FROM conversions c JOIN offers o ON o.id = c.offer_id
      WHERE o.advertiser_id = ? AND (? IS NULL OR c.status = ?)
      ORDER BY c.id DESC LIMIT 500`,
@@ -25,7 +26,7 @@ export default async function AdvertiserConversions(props: { searchParams: Promi
   return (
     <>
       <div className="crumb">Reporting</div>
-      <h1>Conversions</h1>
+      <div className="title-row"><h1>Conversions</h1><a href={`/export/advertiser/conversions${status ? `?status=${status}` : ''}`} className="button secondary-button">Download CSV (30 days)</a></div>
       <div className="tabs">
         <Link href="/advertiser/conversions" className={!status ? 'active' : undefined}>All</Link>
         {STATUSES.map((s) => <Link key={s} href={`/advertiser/conversions?status=${s}`} className={status === s ? 'active' : undefined}>{s}</Link>)}
@@ -57,7 +58,12 @@ export default async function AdvertiserConversions(props: { searchParams: Promi
                 <td>Publisher #{c.publisher_id}</td>
                 <td className="num">{money(c.amount)}</td>
                 <td className="num">{money(c.revenue)}</td>
-                <td><span className={`badge ${c.status}`}>{c.status}</span>{c.reject_reason && <div className="muted">{c.reject_reason}</div>}</td>
+                <td>
+                  <span className={`badge ${c.status}`}>{c.status}</span>
+                  {c.status === 'approved' && c.approved_by === 'auto' && <span className="muted"> (auto)</span>}
+                  {c.status === 'pending' && c.auto_at && <div className="muted">auto-approves {dateTime(c.auto_at)}</div>}
+                  {c.reject_reason && <div className="muted">{c.reject_reason}</div>}
+                </td>
               </tr>
             ))}
             {rows.length === 0 && <tr><td colSpan={10} className="muted">No conversions.</td></tr>}

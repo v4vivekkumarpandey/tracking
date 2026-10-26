@@ -2,13 +2,14 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
-import { CURRENCY, money, trackingBase } from '@/lib/format';
-import { addGoal, approvePublisher, rejectAccess, reviewOffer, revokePublisher, setOfferStatus, setOfferVisibility } from '../../actions';
+import { creativesFor } from '@/lib/creatives';
+import { CURRENCY, dateTime, money, trackingBase } from '@/lib/format';
+import { CreativesManager } from '../../../_components/CreativesManager';
+import { addGoal, approvePublisher, deleteGoal, rejectAccess, reviewOffer, revokePublisher, setOfferStatus, setOfferVisibility } from '../../actions';
+import { EditOffer, type EditableOffer } from './EditOffer';
 
-type Offer = {
-  id: number; name: string; advertiser: string; postback_secret: string; visibility: string; description: string | null;
-  destination_url: string; payout_model: string; status: string; attribution_days: number;
-  default_revenue: string; default_payout: string; revenue_percent: string | null; payout_percent: string | null;
+type Offer = EditableOffer & {
+  advertiser: string; postback_secret: string; visibility: string; status: string;
 };
 
 export default async function OfferPage({ params }: { params: Promise<{ id: string }> }) {
@@ -21,7 +22,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
   );
   if (!o) notFound();
 
-  const [goals, access, publishers] = await Promise.all([
+  const [goals, access, publishers, history, creatives] = await Promise.all([
     q<{ code: string; name: string; revenue: string | null; payout: string | null }>(
       `SELECT code, name, revenue, payout FROM offer_goals WHERE offer_id = ? ORDER BY code`, [oid],
     ),
@@ -33,6 +34,11 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
        WHERE a.offer_id = ? ORDER BY p.name`, [oid],
     ),
     q<{ id: number; name: string }>(`SELECT id, name FROM publishers WHERE status = 'active' ORDER BY name`),
+    q<{ id: number; actor: string; action: string; details: string | null; created_at: Date }>(
+      `SELECT id, actor, action, details, created_at FROM audit_log
+       WHERE entity = 'offer' AND entity_id = ? ORDER BY id DESC LIMIT 50`, [oid],
+    ),
+    creativesFor(oid),
   ]);
 
   const base = trackingBase();
@@ -86,6 +92,8 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           ))}
         </div>
       </div>
+
+      <EditOffer o={o} />
 
       <div className="card stack">
         <h2>Give this to the advertiser</h2>
@@ -157,7 +165,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           Extra events with their own price, sent as <code>&amp;goal=code</code>. A postback without a goal uses the offer defaults.
         </p>
         <table>
-          <thead><tr><th>Code</th><th>Name</th><th className="num">Revenue</th><th className="num">Payout</th></tr></thead>
+          <thead><tr><th>Code</th><th>Name</th><th className="num">Revenue</th><th className="num">Payout</th><th></th></tr></thead>
           <tbody>
             {goals.map((g) => (
               <tr key={g.code}>
@@ -165,10 +173,18 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                 <td>{g.name}</td>
                 <td className="num">{g.revenue ? money(g.revenue) : 'offer default'}</td>
                 <td className="num">{g.payout ? money(g.payout) : 'offer default'}</td>
+                <td className="actions">
+                  <form action={deleteGoal} className="inline">
+                    <input type="hidden" name="offer_id" value={o.id} />
+                    <input type="hidden" name="code" value={g.code} />
+                    <button className="danger small">Delete</button>
+                  </form>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        <p className="muted">To change a goal&apos;s price, save it again below with the same code.</p>
         <form action={addGoal} className="row" style={{ marginTop: 12 }}>
           <input type="hidden" name="offer_id" value={o.id} />
           <label>Code<input name="code" required placeholder="lead" /></label>
@@ -178,6 +194,42 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           <button type="submit">Save goal</button>
         </form>
       </div>
+
+      <CreativesManager offerId={o.id} creatives={creatives} canEdit />
+
+      <div className="card table-wrap">
+        <h2>Change history</h2>
+        <table>
+          <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
+          <tbody>
+            {history.map((h) => (
+              <tr key={h.id}>
+                <td>{dateTime(h.created_at)}</td>
+                <td>{h.actor}</td>
+                <td className="wrap"><HistoryText action={h.action} details={h.details} /></td>
+              </tr>
+            ))}
+            {history.length === 0 && <tr><td colSpan={3} className="muted">No changes recorded yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </>
   );
+}
+
+function HistoryText({ action, details }: { action: string; details: string | null }) {
+  let d: Record<string, unknown> = {};
+  try { d = details ? JSON.parse(details) : {}; } catch { /* old rows */ }
+  if (action === 'edit' && d.changes) {
+    const fmt = (v: unknown) => (v === null || v === '' ? '–' : String(v));
+    return (
+      <>
+        {Object.entries(d.changes as Record<string, [unknown, unknown]>).map(([f, [a, b]]) => (
+          <div key={f}><code>{f}</code>: {fmt(a)} → <strong>{fmt(b)}</strong></div>
+        ))}
+      </>
+    );
+  }
+  const extra = Object.entries(d).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ');
+  return <>{action.replace(/_/g, ' ')}{extra && <span className="muted"> ({extra})</span>}</>;
 }

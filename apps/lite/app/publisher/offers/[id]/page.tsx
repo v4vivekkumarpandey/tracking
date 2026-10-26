@@ -3,7 +3,10 @@ import { notFound } from 'next/navigation';
 import { requirePublisher } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { money, trackingBase } from '@/lib/format';
+import { creativesFor } from '@/lib/creatives';
+import { landingHost } from '@/lib/deeplink';
 import { linkDomainOptions } from '@/lib/domains';
+import { CreativesGallery } from '../../../_components/CreativesGallery';
 import { payoutText } from '@/lib/offerView';
 import { requestAccess } from '../../actions';
 import { LinkBuilder } from './LinkBuilder';
@@ -16,8 +19,10 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
   const [o] = await q<{
     id: number; name: string; description: string | null; payout_model: string; attribution_days: number;
     default_payout: string; payout_percent: string | null; payout_override: string | null; access: string | null; code: string | null;
+    deeplink_enabled: number; destination_url: string;
   }>(
     `SELECT o.id, o.name, o.description, o.payout_model, o.attribution_days, o.default_payout, o.payout_percent,
+            o.deeplink_enabled, o.destination_url,
             a.payout_override, a.status AS access, l.code
      FROM offers o
      LEFT JOIN publisher_offer_access a ON a.offer_id = o.id AND a.publisher_id = ?
@@ -27,9 +32,10 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
   );
   if (!o) notFound();
 
-  const goals = await q<{ code: string; name: string; payout: string | null }>(
-    `SELECT code, name, payout FROM offer_goals WHERE offer_id = ? ORDER BY code`, [oid],
-  );
+  const [goals, creatives] = await Promise.all([
+    q<{ code: string; name: string; payout: string | null }>(`SELECT code, name, payout FROM offer_goals WHERE offer_id = ? ORDER BY code`, [oid]),
+    o.access === 'approved' ? creativesFor(oid) : Promise.resolve([]),
+  ]);
   const approved = o.access === 'approved' && o.code;
   // Link domains: the advertiser's own (first-party, preferred), then the
   // publisher's own, then ours. Only active custom domains are offered.
@@ -69,7 +75,11 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
       </div>
 
       {link ? (
-        <LinkBuilder path={link} domains={domainOptions} />
+        <>
+          <LinkBuilder path={link} domains={domainOptions}
+            deeplinkHost={o.deeplink_enabled ? landingHost(o.destination_url) : null} />
+          <CreativesGallery creatives={creatives} link={`${trackingBase()}${link}`} />
+        </>
       ) : o.access === 'pending' ? (
         <div className="card notice">Your request is waiting for approval. You&apos;ll get your tracking link here once it&apos;s approved.</div>
       ) : o.access === 'rejected' ? (

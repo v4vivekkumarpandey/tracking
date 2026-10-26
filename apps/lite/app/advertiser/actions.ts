@@ -5,7 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { changePassword as change, type FormState } from '@/lib/account';
 import { requireAdvertiser } from '@/lib/auth';
-import { audit, exec } from '@/lib/db';
+import { addCreative, deleteCreative } from '@/lib/creatives';
+import { audit, exec, q } from '@/lib/db';
 import { addDomain, ownedDomain, refreshDomain, removeDomain } from '@/lib/domains';
 
 // Every action takes the advertiser from the session (requireAdvertiser) and
@@ -66,9 +67,9 @@ async function reviewConversions(fd: FormData, status: 'approved' | 'rejected') 
   const reason = status === 'rejected' ? str(fd, 'reason', 255) || null : null;
   const res = await exec(
     `UPDATE conversions c JOIN offers o ON o.id = c.offer_id
-     SET c.status = ?, c.reject_reason = ?, c.updated_at = NOW(3)
+     SET c.status = ?, c.reject_reason = ?, c.approved_by = ?, c.updated_at = NOW(3)
      WHERE c.id IN (${ids.map(() => '?').join(',')}) AND o.advertiser_id = ?`,
-    [status, reason, ...ids, me.advertiserId],
+    [status, reason, status === 'approved' ? 'advertiser' : null, ...ids, me.advertiserId],
   );
   await audit(`advertiser:${me.advertiserId}`, `conversions_${status}`, 'advertiser', me.advertiserId, { count: res.affectedRows });
   revalidatePath('/advertiser', 'layout');
@@ -99,6 +100,36 @@ export async function updateAccount(_: FormState, fd: FormData): Promise<FormSta
 export async function changePassword(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requireAdvertiser();
   return change(me.userId, fd);
+}
+
+// ---- Creatives for their own offers ----
+
+async function ownOffer(fd: FormData, advertiserId: number): Promise<number | null> {
+  const oid = Number(str(fd, 'offer_id'));
+  if (!Number.isInteger(oid) || oid <= 0) return null;
+  const [o] = await q<{ id: number }>(`SELECT id FROM offers WHERE id = ? AND advertiser_id = ?`, [oid, advertiserId]);
+  return o ? oid : null;
+}
+
+export async function uploadCreativeAdvertiser(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requireAdvertiser();
+  const oid = await ownOffer(fd, me.advertiserId);
+  if (!oid) return { error: 'Offer not found.' };
+  const err = await addCreative(oid, fd, `advertiser:${me.advertiserId}`);
+  if (err) return { error: err };
+  await audit(`advertiser:${me.advertiserId}`, 'add_creative', 'offer', oid);
+  revalidatePath(`/advertiser/offers/${oid}`);
+  return { ok: 'Added.' };
+}
+
+export async function deleteCreativeAdvertiser(fd: FormData) {
+  const me = await requireAdvertiser();
+  const oid = await ownOffer(fd, me.advertiserId);
+  const cid = Number(str(fd, 'id'));
+  if (!oid || !Number.isInteger(cid)) return;
+  await deleteCreative(cid, oid);
+  await audit(`advertiser:${me.advertiserId}`, 'delete_creative', 'offer', oid);
+  revalidatePath(`/advertiser/offers/${oid}`);
 }
 
 // ---- Custom tracking domains (owner always taken from the session) ----
