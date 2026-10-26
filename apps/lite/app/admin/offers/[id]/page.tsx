@@ -5,6 +5,8 @@ import { q } from '@/lib/db';
 import { creativesFor } from '@/lib/creatives';
 import { CURRENCY, dateTime, money, trackingBase } from '@/lib/format';
 import { CreativesManager } from '../../../_components/CreativesManager';
+import { LandingPagesManager } from '../../../_components/LandingPagesManager';
+import { landingPagesFor } from '@/lib/landing';
 import { addGoal, approvePublisher, deleteGoal, rejectAccess, reviewOffer, revokePublisher, setOfferStatus, setOfferVisibility } from '../../actions';
 import { TargetingSummary } from '../../../_components/TargetingSummary';
 import { EditOffer, type EditableOffer } from './EditOffer';
@@ -23,7 +25,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
   );
   if (!o) notFound();
 
-  const [goals, access, publishers, history, creatives, otherOffers] = await Promise.all([
+  const [goals, access, publishers, history, creatives, otherOffers, landings] = await Promise.all([
     q<{ code: string; name: string; revenue: string | null; payout: string | null }>(
       `SELECT code, name, revenue, payout FROM offer_goals WHERE offer_id = ? ORDER BY code`, [oid],
     ),
@@ -41,6 +43,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
     ),
     creativesFor(oid),
     q<{ id: number; name: string }>(`SELECT id, name FROM offers WHERE status = 'active' ORDER BY name`),
+    landingPagesFor(oid, true),
   ]);
 
   const base = trackingBase();
@@ -197,6 +200,8 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           <button type="submit">Save goal</button>
         </form>
       </div>
+
+      <LandingPagesManager offerId={o.id} defaultUrl={o.destination_url} pages={landings} as="admin" />
 
       <CreativesManager offerId={o.id} creatives={creatives} canEdit />
 

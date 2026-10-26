@@ -25,6 +25,9 @@ export default async function Integration(props: { searchParams: Promise<{ domai
   const base = host === new URL(trackingBase()).host ? trackingBase() : `https://${host}`;
   const s2s = `${base}/postback?click_id={CLICK_ID}&secret=${adv.secret}&txn_id={ORDER_ID}&amount={SALE_AMOUNT}`;
   const pixel = `<img src="${base}/px?click_id={CLICK_ID}&txn_id={ORDER_ID}&amount={SALE_AMOUNT}" width="1" height="1" alt="" style="display:none" />`;
+  const cookiePixel = `<img src="${base}/px?offer_id=${offers[0]?.id ?? '{OFFER_ID}'}&txn_id={ORDER_ID}&amount={SALE_AMOUNT}" width="1" height="1" alt="" style="display:none" />`;
+  const tag = `<script src="${base}/t.js"></script>`;
+  const tagConversion = `<script>trk('conversion', { txn_id: '{ORDER_ID}', amount: '{SALE_AMOUNT}' });</script>`;
 
   return (
     <>
@@ -65,9 +68,30 @@ export default async function Integration(props: { searchParams: Promise<{ domai
       </section>
 
       <section className="card stack">
+        <h2>No developer? JavaScript tag</h2>
+        <p>
+          Paste this on <strong>every page</strong> of your site (or at least the landing page and the thank-you page). It saves
+          our click ID in your own site&apos;s cookie, so you don&apos;t need to store it yourself:
+        </p>
+        <code className="link-out">{tag}</code>
+        <p>Then, on the <strong>thank-you page only</strong>, below that line, report the conversion:</p>
+        <code className="link-out">{tagConversion}</code>
+        <p className="muted">
+          If your landing page URL passes our ID under another name (e.g. <code>?cid=</code>), add <code>data-param=&quot;cid&quot;</code> to the
+          script tag. Ad blockers can stop browser tags; the server call above can&apos;t be blocked.
+        </p>
+      </section>
+
+      <section className="card stack">
         <h2>Alternative: browser pixel</h2>
         <p className="muted">Use only if a server call isn&apos;t possible. Place it on the thank-you page; ad blockers can stop it.</p>
         <code className="link-out">{pixel}</code>
+        <p>Can&apos;t get the click ID onto the thank-you page at all? Use the offer ID instead and we match the visitor by our cookie:</p>
+        <code className="link-out">{cookiePixel}</code>
+        <p className="muted">
+          Works in Chrome and Edge. Safari and Firefox block this cookie unless the pixel is served from your own tracking domain
+          (<Link href="/advertiser/domains">Domains</Link>), so prefer the server call or the JavaScript tag.
+        </p>
       </section>
 
       <section className="card stack">

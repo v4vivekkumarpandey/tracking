@@ -8,11 +8,13 @@ import { channelLabel, sourceLabel } from './sourceLabels';
 // Clicks come from stats_hourly (or raw clicks for sub1); conversions and
 // money from non-rejected conversions. Days are UTC.
 
-export type Group = 'day' | 'offer' | 'publisher' | 'sub1' | 'source' | 'channel';
+export type Group = 'day' | 'offer' | 'publisher' | 'sub1' | 'source' | 'channel' | 'landing';
 
 /** Groups that need raw clicks (kept for CLICK_RETENTION_DAYS, 90 by default). */
-export const RAW_GROUPS: Group[] = ['sub1', 'source', 'channel'];
-const RAW_COL: Partial<Record<Group, string>> = { sub1: 't.sub1', source: 't.traffic_source', channel: 't.traffic_channel' };
+export const RAW_GROUPS: Group[] = ['sub1', 'source', 'channel', 'landing'];
+const RAW_COL: Partial<Record<Group, string>> = {
+  sub1: 't.sub1', source: 't.traffic_source', channel: 't.traffic_channel', landing: 'CAST(t.lp_id AS CHAR)',
+};
 export type ReportRow = {
   key: string; label: string; clicks: number; uniques: number; flagged: number; redirected: number;
   conversions: number; approved: number; pending: number; revenue: number; payout: number;
@@ -42,8 +44,8 @@ function where(scope: Scope, alias: string): { join: string; sql: string; params
 
 export async function runReport(scope: Scope, group: Group, from: string, toExcl: string) {
   const s = where(scope, 't');
-  const clickKey = { day: `DATE_FORMAT(t.hour, '%Y-%m-%d')`, offer: 'CAST(t.offer_id AS CHAR)', publisher: 'CAST(t.publisher_id AS CHAR)', sub1: '', source: '', channel: '' }[group];
-  const convKey = { day: `DATE_FORMAT(t.created_at, '%Y-%m-%d')`, offer: 'CAST(t.offer_id AS CHAR)', publisher: 'CAST(t.publisher_id AS CHAR)', sub1: 't.sub1', source: 't.traffic_source', channel: 't.traffic_channel' }[group];
+  const clickKey = { day: `DATE_FORMAT(t.hour, '%Y-%m-%d')`, offer: 'CAST(t.offer_id AS CHAR)', publisher: 'CAST(t.publisher_id AS CHAR)', sub1: '', source: '', channel: '', landing: '' }[group];
+  const convKey = { day: `DATE_FORMAT(t.created_at, '%Y-%m-%d')`, offer: 'CAST(t.offer_id AS CHAR)', publisher: 'CAST(t.publisher_id AS CHAR)', sub1: 't.sub1', source: 't.traffic_source', channel: 't.traffic_channel', landing: 'CAST(t.lp_id AS CHAR)' }[group];
 
   // Clicks sent to a fallback URL (targeting/caps) count as "redirected", not as clicks.
   const clicksSql = RAW_GROUPS.includes(group)
@@ -65,6 +67,8 @@ export async function runReport(scope: Scope, group: Group, from: string, toExcl
     ),
     group === 'offer' ? q<{ id: number; name: string }>(`SELECT id, name FROM offers`)
       : group === 'publisher' ? q<{ id: number; name: string }>(`SELECT id, name FROM publishers`)
+      : group === 'landing' ? q<{ id: number; name: string }>(
+        `SELECT lp.id, CONCAT(o.name, ' – ', lp.name) AS name FROM offer_landing_pages lp JOIN offers o ON o.id = lp.offer_id`)
       : Promise.resolve([] as { id: number; name: string }[]),
   ]);
   const nameOf = new Map(names.map((n) => [String(n.id), n.name]));
@@ -74,6 +78,7 @@ export async function runReport(scope: Scope, group: Group, from: string, toExcl
     let r = rows.get(k);
     if (!r) {
       const label = group === 'offer' || group === 'publisher' ? nameOf.get(k) ?? `#${k}`
+        : group === 'landing' ? (k ? nameOf.get(k) ?? `Page #${k}` : 'Default landing page')
         : group === 'source' ? (k ? sourceLabel(k) : 'Not recorded')
         : group === 'channel' ? (k ? channelLabel(k) : 'Not recorded')
         : k || '(empty)';

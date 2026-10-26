@@ -6,6 +6,8 @@ import { creativesFor } from '@/lib/creatives';
 import { domainsFor } from '@/lib/domains';
 import { CreativesManager } from '../../../_components/CreativesManager';
 import { SourceBreakdown } from '../../../_components/SourceBreakdown';
+import { LandingPagesManager } from '../../../_components/LandingPagesManager';
+import { landingPagesFor } from '@/lib/landing';
 import { sourceLabel } from '@/lib/sourceLabels';
 import { count, money, pct, trackingBase } from '@/lib/format';
 
@@ -22,7 +24,7 @@ export default async function AdvertiserOffer(props: { params: Promise<{ id: str
   );
   if (!o) notFound();
 
-  const [[stats], goals, creatives] = await Promise.all([
+  const [[stats], goals, creatives, landings] = await Promise.all([
     q<{ clicks: string; conversions: string; cost: string }>(
       `SELECT (SELECT COALESCE(SUM(clicks), 0) FROM stats_hourly WHERE offer_id = ? AND hour >= UTC_DATE() - INTERVAL 30 DAY) AS clicks,
               (SELECT COUNT(*) FROM conversions WHERE offer_id = ? AND status <> 'rejected' AND created_at >= UTC_DATE() - INTERVAL 30 DAY) AS conversions,
@@ -31,6 +33,7 @@ export default async function AdvertiserOffer(props: { params: Promise<{ id: str
     ),
     q<{ code: string; name: string; revenue: string | null }>(`SELECT code, name, revenue FROM offer_goals WHERE offer_id = ? ORDER BY code`, [oid]),
     creativesFor(oid),
+    landingPagesFor(oid, true),
   ]);
   const own = (await domainsFor({ type: 'advertiser', id: me.advertiserId })).find((d) => d.status === 'active');
   const base = own ? `https://${own.hostname}` : trackingBase();
@@ -75,6 +78,8 @@ export default async function AdvertiserOffer(props: { params: Promise<{ id: str
         <code className="link-out">{`${base}/postback?click_id={CLICK_ID}&secret=${o.secret}&txn_id={ORDER_ID}&amount={SALE_AMOUNT}`}</code>
         <p className="muted">Full guide, pixel option and test log: <Link href="/advertiser/integration">Integration</Link>.</p>
       </div>
+
+      <LandingPagesManager offerId={o.id} defaultUrl={o.destination_url} pages={landings} as="advertiser" />
 
       <CreativesManager offerId={o.id} creatives={creatives} canEdit as="advertiser" />
     </>

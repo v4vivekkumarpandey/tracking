@@ -24,7 +24,9 @@ async function scopeFor(panel: Panel): Promise<Scope> {
 }
 
 const ALLOWED_GROUPS: Record<Panel, Group[]> = {
-  admin: ['day', 'offer', 'publisher', 'source', 'channel'], publisher: ['day', 'offer', 'sub1', 'source', 'channel'], advertiser: ['day', 'offer', 'source', 'channel'],
+  admin: ['day', 'offer', 'publisher', 'source', 'channel', 'landing'],
+  publisher: ['day', 'offer', 'sub1', 'source', 'channel', 'landing'],
+  advertiser: ['day', 'offer', 'source', 'channel', 'landing'],
 };
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ panel: string; report: string }> }) {

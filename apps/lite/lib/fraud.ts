@@ -19,6 +19,8 @@ export type Signals = {
   pubConvToday: number;
   /** Label of the click's traffic source if the offer disallows it. */
   disallowedSource?: string | null;
+  /** Network name if the click came from a data center / hosting / VPN network. */
+  clickDatacenter?: string | null;
 };
 
 export function fraudScore(s: Signals): { score: number; reasons: string[] } {
@@ -38,6 +40,7 @@ export function fraudScore(s: Signals): { score: number; reasons: string[] } {
   }
   if (s.clickBot) add(40, 'bot click');
   if (s.clickDuplicate) add(20, 'duplicate click');
+  if (s.clickDatacenter) add(40, `data-center/VPN IP (${s.clickDatacenter})`);
   if (s.sameIpToday >= 3) add(30, `${s.sameIpToday + 1} conversions from one IP today`);
   if (s.pubClicksToday >= 20 && s.pubConvToday >= 5 && s.pubCr7d > 0 && s.pubCrToday > 5 * s.pubCr7d) {
     add(30, `conversion rate ${(s.pubCrToday * 100).toFixed(1)}% vs ${(s.pubCr7d * 100).toFixed(1)}% usual`);

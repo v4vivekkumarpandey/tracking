@@ -12,7 +12,7 @@
 // Route: */* on the ossaward.org zone. Requests for ossaward.org itself are
 // passed through untouched (see OWN_ZONE).
 
-const TRACKING_PATHS = /^\/([cs]\/[A-Za-z0-9]{1,32}\/?$|postback\/?$|px\/?$|healthz$)/;
+const TRACKING_PATHS = /^\/([cs]\/[A-Za-z0-9]{1,32}\/?$|postback\/?$|px\/?$|t\.js$|healthz$)/;
 
 export default {
   async fetch(request, env) {
@@ -30,7 +30,10 @@ export default {
     }
 
     const headers = new Headers(request.headers);
-    headers.delete('cookie'); // never forward cookies from customer domains
+    // Forward only our click cookies (_trk_*), never the customer's own cookies.
+    const ours = (request.headers.get('cookie') ?? '').split(/;\s*/).filter((c) => c.startsWith('_trk_'));
+    headers.delete('cookie');
+    if (ours.length) headers.set('cookie', ours.join('; '));
     headers.set('X-Tracking-Host', url.hostname);
     headers.set('X-Tracking-Key', env.PROXY_SECRET);
     headers.set('X-Visitor-IP', request.headers.get('CF-Connecting-IP') ?? '');
@@ -45,7 +48,10 @@ export default {
     });
 
     const out = new Response(res.body, res);
+    // Pass on only our click cookie (used by the pixel fallback on this domain).
+    const setCookies = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
     out.headers.delete('set-cookie');
+    for (const c of setCookies) if (c.startsWith('_trk_')) out.headers.append('set-cookie', c);
     return out;
   },
 };

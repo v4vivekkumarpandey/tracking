@@ -21,7 +21,7 @@ const INSERT_SQL = `
 INSERT INTO conversions
   (click_id, click_time, offer_id, publisher_id, link_id, goal, txn_id, txn_key,
    amount, revenue, payout, source, ip, fraud_score, fraud_reasons, sub1, sub2, sub3, sub4, sub5,
-   traffic_source, traffic_channel)
+   traffic_source, traffic_channel, lp_id)
 SELECT ?, ?, o.id, ?, ?, ?, ?, NULLIF(?, ''),
   CAST(? AS DECIMAL(14,2)),
   ROUND(COALESCE(g.revenue,
@@ -32,7 +32,7 @@ SELECT ?, ?, o.id, ?, ?, ?, ?, NULLIF(?, ''),
              ELSE o.default_payout END), 2),
   ?, ?, ?, ?,
   COALESCE(c.sub1, ''), COALESCE(c.sub2, ''), COALESCE(c.sub3, ''), COALESCE(c.sub4, ''), COALESCE(c.sub5, ''),
-  COALESCE(c.traffic_source, ''), COALESCE(c.traffic_channel, '')
+  COALESCE(c.traffic_source, ''), COALESCE(c.traffic_channel, ''), c.lp_id
 FROM offers o
 LEFT JOIN offer_goals g ON g.offer_id = o.id AND g.code = ?
 LEFT JOIN publisher_offer_access a ON a.offer_id = o.id AND a.publisher_id = ?
@@ -122,7 +122,7 @@ export async function recordConversion(params: URLSearchParams, source: 's2s' | 
 async function scoreConversion(clickId: string, click: Click) {
   try {
     const [s] = await q<Record<string, string | Date | null>>(
-      `SELECT c.ts AS click_ts, c.is_bot AS bot, c.is_duplicate AS dup, c.traffic_source AS src,
+      `SELECT c.ts AS click_ts, c.is_bot AS bot, c.is_duplicate AS dup, c.traffic_source AS src, c.ip_type, c.asn_org,
               (SELECT blocked_sources FROM offers WHERE id = ?) AS blocked,
               -- Same visitor IP (from the clicks), not the request IP: for S2S
               -- postbacks the request comes from the advertiser's server.
@@ -147,6 +147,7 @@ async function scoreConversion(clickId: string, click: Click) {
       pubConvToday: pvToday + 1, // including this one
       pubCrToday: pcToday ? (pvToday + 1) / pcToday : 0,
       pubCr7d: pc7 ? pv7 / pc7 : 0,
+      clickDatacenter: s.ip_type === 'datacenter' ? String(s.asn_org || 'unknown network') : null,
       disallowedSource: s.src && String(s.blocked ?? '').split(',').includes(String(s.src)) ? sourceLabel(String(s.src)) : null,
     });
   } catch (e) {

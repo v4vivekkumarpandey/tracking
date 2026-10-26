@@ -100,6 +100,7 @@ They can only use a subdomain (`track.theirsite.com`), not the bare domain (`the
 ## Security notes
 
 - A custom domain only serves its owner's links: a publisher's own links, or links to an advertiser's own offers. Any other link code on that domain returns 404.
-- Only `/c/…`, `/postback` and `/px` work on customer domains. The login page and panels are never reachable there.
+- Only `/c/…`, `/s/…`, `/postback`, `/px` and `/t.js` work on customer domains. The login page and panels are never reachable there.
+- The Worker passes only our own `_trk_…` click cookies (used by the pixel fallback) between the visitor and the app; the customer's other cookies never reach us. If you set the Worker up before this change, paste the new `worker.js` again.
 - The app trusts the Worker's headers (domain, visitor IP, country) only when `PROXY_SECRET` matches. Keep it secret, and change it in both places if it leaks.
 - Admin → Domains can **Disable** a domain instantly (e.g. abuse) or **Remove** it.
