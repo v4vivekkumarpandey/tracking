@@ -250,4 +250,25 @@ export const migrations: { version: number; statements: string[] }[] = [
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     ],
   },
+  {
+    // Custom tracking domains served through Cloudflare for SaaS.
+    version: 3,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS tracking_domains (
+        id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        hostname     VARCHAR(253) NOT NULL,
+        owner_type   VARCHAR(16)  NOT NULL,
+        owner_id     BIGINT UNSIGNED NOT NULL,
+        cf_id        VARCHAR(64)  NULL,
+        status       VARCHAR(16)  NOT NULL DEFAULT 'pending',
+        last_error   VARCHAR(255) NULL,
+        checked_at   DATETIME(3)  NULL,
+        activated_at DATETIME(3)  NULL,
+        created_at   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE KEY uq_domain_host (hostname),
+        KEY ix_domain_owner (owner_type, owner_id),
+        KEY ix_domain_check (status, checked_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    ],
+  },
 ];

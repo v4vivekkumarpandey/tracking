@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireAdvertiser } from '@/lib/auth';
 import { q } from '@/lib/db';
+import { domainsFor } from '@/lib/domains';
 import { count, money, pct, trackingBase } from '@/lib/format';
 
 export default async function AdvertiserOffer(props: { params: Promise<{ id: string }>; searchParams: Promise<{ submitted?: string }> }) {
@@ -26,7 +27,8 @@ export default async function AdvertiserOffer(props: { params: Promise<{ id: str
     ),
     q<{ code: string; name: string; revenue: string | null }>(`SELECT code, name, revenue FROM offer_goals WHERE offer_id = ? ORDER BY code`, [oid]),
   ]);
-  const base = trackingBase();
+  const own = (await domainsFor({ type: 'advertiser', id: me.advertiserId })).find((d) => d.status === 'active');
+  const base = own ? `https://${own.hostname}` : trackingBase();
 
   return (
     <>

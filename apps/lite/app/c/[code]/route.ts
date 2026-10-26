@@ -3,7 +3,8 @@ import { newClickId } from '@/lib/clickid';
 import { exec, q } from '@/lib/db';
 import { getLink } from '@/lib/links';
 import { expand } from '@/lib/macros';
-import { BOT_UA, clientIp, trunc } from '@/lib/request';
+import { activeDomainOwner } from '@/lib/domains';
+import { BOT_UA, trackingContext, trunc } from '@/lib/request';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,11 +27,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   }
   if (!link || !link.active) return fallback();
 
+  // On a custom domain (forwarded by our Cloudflare Worker), only links the
+  // domain's owner is entitled to are served: the publisher's own links, or
+  // links to the advertiser's own offers.
+  const ctx = trackingContext(req);
+  if (ctx.viaProxy) {
+    const owner = await activeDomainOwner(ctx.host).catch(() => null);
+    const allowed =
+      (owner?.type === 'publisher' && owner.id === link.publisherId) ||
+      (owner?.type === 'advertiser' && owner.id === link.advertiserId);
+    if (!allowed) return new NextResponse('Not found', { status: 404 });
+  }
+
   const now = new Date();
   const clickId = newClickId(link.offerId, link.publisherId, link.id, now);
   const sp = req.nextUrl.searchParams;
   const subs = [1, 2, 3, 4, 5].map((i) => trunc(sp.get(`sub${i}`), 255));
-  const ip = clientIp(req);
+  const ip = ctx.ip;
   const ua = req.headers.get('user-agent') ?? '';
 
   const vals: Record<string, string> = {
@@ -58,7 +71,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
                            sub1, sub2, sub3, sub4, sub5, is_bot, is_duplicate)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [clickId, now, link.offerId, link.publisherId, link.id, ip, trunc(ua, 512),
-       trunc(req.headers.get('referer'), 512), trunc(req.headers.get('cf-ipcountry'), 2),
+       trunc(req.headers.get('referer'), 512), ctx.country,
        ...subs, isBot, isDup],
     );
     const hour = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000);

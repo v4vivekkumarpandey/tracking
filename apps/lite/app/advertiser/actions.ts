@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { changePassword as change, type FormState } from '@/lib/account';
 import { requireAdvertiser } from '@/lib/auth';
 import { audit, exec } from '@/lib/db';
+import { addDomain, ownedDomain, refreshDomain, removeDomain } from '@/lib/domains';
 
 // Every action takes the advertiser from the session (requireAdvertiser) and
 // limits writes to rows belonging to that advertiser's offers.
@@ -98,4 +99,33 @@ export async function updateAccount(_: FormState, fd: FormData): Promise<FormSta
 export async function changePassword(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requireAdvertiser();
   return change(me.userId, fd);
+}
+
+// ---- Custom tracking domains (owner always taken from the session) ----
+
+const domainId = (fd: FormData) => {
+  const n = Number(str(fd, 'id'));
+  if (!Number.isInteger(n) || n <= 0) throw new Error('id is invalid');
+  return n;
+};
+
+export async function addDomainAction(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requireAdvertiser();
+  const res = await addDomain({ type: 'advertiser', id: me.advertiserId }, str(fd, 'hostname', 300));
+  revalidatePath('/advertiser/domains');
+  return res;
+}
+
+export async function checkDomainAction(fd: FormData) {
+  const me = await requireAdvertiser();
+  const d = await ownedDomain(domainId(fd), { type: 'advertiser', id: me.advertiserId });
+  if (d) await refreshDomain(d);
+  revalidatePath('/advertiser/domains');
+}
+
+export async function removeDomainAction(fd: FormData) {
+  const me = await requireAdvertiser();
+  const d = await ownedDomain(domainId(fd), { type: 'advertiser', id: me.advertiserId });
+  if (d) await removeDomain(d);
+  revalidatePath('/advertiser/domains');
 }

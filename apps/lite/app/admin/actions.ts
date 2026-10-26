@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { audit, exec, q } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
+import { refreshDomain, removeDomain, setDisabled, type DomainRow } from '@/lib/domains';
 import { clearLinkCache } from '@/lib/links';
 import { hashPassword, tempPassword } from '@/lib/password';
 import { assertPublicUrl } from '@/lib/safeUrl';
@@ -273,6 +274,39 @@ export async function resetLogin(_: ResetState, fd: FormData): Promise<ResetStat
   }
   await audit(me, 'reset_login', role, eid);
   return { password, email: user?.email ?? entity.email ?? '' };
+}
+
+// ---------- Custom domains ----------
+
+async function domainRow(fd: FormData) {
+  const [d] = await q<DomainRow>(`SELECT * FROM tracking_domains WHERE id = ?`, [id(fd)]);
+  return d ?? null;
+}
+
+export async function adminCheckDomain(fd: FormData) {
+  await requireAdmin();
+  const d = await domainRow(fd);
+  if (d) await refreshDomain(d);
+  revalidatePath('/admin/domains');
+}
+
+export async function adminSetDomainDisabled(fd: FormData) {
+  const me = await requireAdmin();
+  const did = id(fd);
+  const disabled = str(fd, 'disabled') === '1';
+  await setDisabled(did, disabled);
+  await audit(me, disabled ? 'disable_domain' : 'enable_domain', 'tracking_domain', did);
+  revalidatePath('/admin/domains');
+}
+
+export async function adminRemoveDomain(fd: FormData) {
+  const me = await requireAdmin();
+  const d = await domainRow(fd);
+  if (d) {
+    await removeDomain(d);
+    await audit(me, 'remove_domain', 'tracking_domain', d.id, { hostname: d.hostname });
+  }
+  revalidatePath('/admin/domains');
 }
 
 // ---------- Payments ----------
