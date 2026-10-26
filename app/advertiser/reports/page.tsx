@@ -2,7 +2,7 @@ import { requireAdvertiser } from '@/lib/auth';
 import { count, money, pct } from '@/lib/format';
 import { RAW_GROUPS, parseRange, runReport, type Group } from '@/lib/reports';
 
-const GROUPS: Partial<Record<Group, string>> = { day: 'Day', offer: 'Offer', source: 'Traffic source', channel: 'Channel' };
+const GROUPS: Partial<Record<Group, string>> = { day: 'Day', offer: 'Offer', source: 'Traffic source', channel: 'Channel', landing: 'Landing page' };
 
 export default async function AdvertiserReports(props: { searchParams: Promise<{ from?: string; to?: string; group?: string }> }) {
   const me = await requireAdvertiser();

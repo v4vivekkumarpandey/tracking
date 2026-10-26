@@ -3,7 +3,7 @@ import { ALL } from '@/lib/dashboard';
 import { count, money, pct } from '@/lib/format';
 import { RAW_GROUPS, parseRange, runReport, type Group } from '@/lib/reports';
 
-const GROUPS: Partial<Record<Group, string>> = { day: 'Day', offer: 'Offer', publisher: 'Publisher', source: 'Traffic source', channel: 'Channel' };
+const GROUPS: Partial<Record<Group, string>> = { day: 'Day', offer: 'Offer', publisher: 'Publisher', source: 'Traffic source', channel: 'Channel', landing: 'Landing page' };
 
 export default async function Reports(props: { searchParams: Promise<{ from?: string; to?: string; group?: string }> }) {
   await requireAdmin();

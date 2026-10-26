@@ -12,6 +12,8 @@ export const DEFAULTS = {
   referral_percent: '5',
   referral_months: '12',
   default_auto_approve_days: '',
+  /** 'flag' (count it, raise the fraud score) or 'block' (don't send to offers). */
+  datacenter_traffic: 'flag',
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
@@ -24,11 +26,22 @@ export async function getSettings(): Promise<Settings> {
   return s;
 }
 
+// The click path reads settings on every click: cache them briefly.
+let cached: { s: Settings; exp: number } | null = null;
+
+export async function getSettingsCached(): Promise<Settings> {
+  if (cached && cached.exp > Date.now()) return cached.s;
+  const s = await getSettings();
+  cached = { s, exp: Date.now() + 60_000 };
+  return s;
+}
+
 export async function saveSettings(values: Partial<Settings>): Promise<void> {
   for (const [k, v] of Object.entries(values)) {
     if (!(k in DEFAULTS)) continue;
     await exec(`INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = ?`, [k, v ?? '', v ?? '']);
   }
+  cached = null;
 }
 
 /** Referral terms as numbers, clamped to sane ranges. */

@@ -34,10 +34,15 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
   );
   if (!o) notFound();
 
-  const [goals, creatives] = await Promise.all([
+  const [goals, creatives, landings] = await Promise.all([
     q<{ code: string; name: string; payout: string | null }>(`SELECT code, name, payout FROM offer_goals WHERE offer_id = ? ORDER BY code`, [oid]),
     o.access === 'approved' ? creativesFor(oid) : Promise.resolve([]),
+    q<{ id: number; name: string; url: string }>(
+      `SELECT id, name, url FROM offer_landing_pages WHERE offer_id = ? AND status = 'active' ORDER BY id`, [oid],
+    ),
   ]);
+  // Preview links without our macros ({click_id} etc. are filled in per click).
+  const preview = (u: string) => u.replace(/\{[a-z0-9_]+\}/gi, '');
   const approved = o.access === 'approved' && o.code;
   // Link domains: the advertiser's own (first-party, preferred), then the
   // publisher's own, then ours. Only active custom domains are offered.
@@ -80,7 +85,9 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
       {link ? (
         <>
           <LinkBuilder path={link} domains={domainOptions}
-            deeplinkHost={o.deeplink_enabled ? landingHost(o.destination_url) : null} />
+            deeplinkHost={o.deeplink_enabled ? landingHost(o.destination_url) : null}
+            landings={[{ id: 0, name: 'Default', preview: preview(o.destination_url) },
+              ...landings.map((l) => ({ id: Number(l.id), name: l.name, preview: preview(l.url) }))]} />
           <CreativesGallery creatives={creatives} link={`${trackingBase()}${link}`} />
         </>
       ) : o.access === 'pending' ? (

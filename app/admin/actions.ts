@@ -7,6 +7,9 @@ import { audit, exec, q } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
 import { clearCapsCache } from '@/lib/caps';
 import { addCreative, deleteCreative } from '@/lib/creatives';
+import { addLandingPage, updateLandingPage } from '@/lib/landing';
+import { clearBlockCache } from '@/lib/ipIntel';
+import { parseRule } from '@/lib/ipRules';
 import { refreshDomain, removeDomain, setDisabled, type DomainRow } from '@/lib/domains';
 import { generateInvoices, setInvoiceStatus } from '@/lib/invoices';
 import { clearLinkCache } from '@/lib/links';
@@ -309,6 +312,63 @@ export async function deleteCreativeAdmin(fd: FormData) {
   revalidatePath(`/admin/offers/${oid}`);
 }
 
+// ---------- Landing pages ----------
+
+export async function addLandingAdmin(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const oid = id(fd, 'offer_id');
+  const err = await addLandingPage(oid, fd, 'admin');
+  if (err) return { error: err };
+  await audit(me, 'add_landing_page', 'offer', oid, { name: str(fd, 'name') });
+  revalidatePath(`/admin/offers/${oid}`);
+  return { ok: 'Added.' };
+}
+
+export async function updateLandingAdmin(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const oid = id(fd, 'offer_id');
+  const err = await updateLandingPage(oid, fd);
+  if (err) return { error: err };
+  await audit(me, 'update_landing_page', 'offer', oid, { page: str(fd, 'lp_id'), split: str(fd, 'weight') || '0', status: str(fd, 'status') });
+  revalidatePath(`/admin/offers/${oid}`);
+  return { ok: 'Saved.' };
+}
+
+// ---------- IP blocklist ----------
+
+async function insertBlock(me: string, rule: string, note: string): Promise<{ ok?: string; error?: string }> {
+  const p = parseRule(rule);
+  if ('error' in p) return { error: p.error };
+  const res = await exec(`INSERT IGNORE INTO ip_blocks (rule, note, created_by) VALUES (?, ?, ?)`, [p.text, note.slice(0, 200) || null, me]);
+  if (res.affectedRows === 0) return { error: `${p.text} is already blocked.` };
+  await audit(me, 'block_ip', 'ip_block', res.insertId, { rule: p.text });
+  clearBlockCache();
+  revalidatePath('/admin/protection');
+  return { ok: `Blocked ${p.text}. New clicks from it never reach an offer.` };
+}
+
+export async function addIpBlock(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  return insertBlock(me, str(fd, 'rule'), str(fd, 'note'));
+}
+
+/** One-click block from the protection page or the click log. */
+export async function quickBlock(fd: FormData) {
+  const me = await requireAdmin();
+  await insertBlock(me, str(fd, 'rule'), str(fd, 'note'));
+  revalidatePath('/admin/clicks');
+}
+
+export async function removeIpBlock(fd: FormData) {
+  const me = await requireAdmin();
+  const bid = id(fd);
+  const [b] = await q<{ rule: string }>(`SELECT rule FROM ip_blocks WHERE id = ?`, [bid]);
+  await exec(`DELETE FROM ip_blocks WHERE id = ?`, [bid]);
+  if (b) await audit(me, 'unblock_ip', 'ip_block', bid, { rule: b.rule });
+  clearBlockCache();
+  revalidatePath('/admin/protection');
+}
+
 export async function deleteGoal(fd: FormData) {
   const me = await requireAdmin();
   const oid = id(fd, 'offer_id');
@@ -450,13 +510,15 @@ async function defaultAutoApprove(): Promise<number | null> {
 export async function saveSettingsAction(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
   const me = await requireAdmin();
   const v: Partial<Settings> = {};
-  for (const k of Object.keys(DEFAULTS) as SettingKey[]) v[k] = str(fd, k).slice(0, 2000);
+  // Only fields on the submitted form: other pages save their own settings.
+  for (const k of Object.keys(DEFAULTS) as SettingKey[]) if (fd.has(k)) v[k] = str(fd, k).slice(0, 2000);
   const numeric = (k: SettingKey, max: number) => {
     if (v[k] && (!/^\d+(\.\d{1,2})?$/.test(v[k]!) || Number(v[k]) > max)) throw new Error(`${k.replace(/_/g, ' ')} must be a number up to ${max}.`);
   };
   try {
     numeric('referral_percent', 50); numeric('referral_months', 120); numeric('invoice_tax_percent', 100);
     numeric('invoice_due_days', 365); numeric('default_auto_approve_days', 365);
+    if (v.datacenter_traffic !== undefined) oneOf(v.datacenter_traffic, ['flag', 'block'] as const);
   } catch (e) {
     return { error: (e as Error).message };
   }

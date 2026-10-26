@@ -8,6 +8,7 @@ import { requireAdvertiser } from '@/lib/auth';
 import { addCreative, deleteCreative } from '@/lib/creatives';
 import { audit, exec, q } from '@/lib/db';
 import { addDomain, ownedDomain, refreshDomain, removeDomain } from '@/lib/domains';
+import { addLandingPage, updateLandingPage } from '@/lib/landing';
 
 // Every action takes the advertiser from the session (requireAdvertiser) and
 // limits writes to rows belonging to that advertiser's offers.
@@ -130,6 +131,31 @@ export async function deleteCreativeAdvertiser(fd: FormData) {
   await deleteCreative(cid, oid);
   await audit(`advertiser:${me.advertiserId}`, 'delete_creative', 'offer', oid);
   revalidatePath(`/advertiser/offers/${oid}`);
+}
+
+// ---- Landing pages for their own offers ----
+
+export async function addLandingAdvertiser(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requireAdvertiser();
+  const oid = await ownOffer(fd, me.advertiserId);
+  if (!oid) return { error: 'Offer not found.' };
+  const err = await addLandingPage(oid, fd, `advertiser:${me.advertiserId}`);
+  if (err) return { error: err };
+  await audit(`advertiser:${me.advertiserId}`, 'add_landing_page', 'offer', oid, { name: str(fd, 'name', 200) });
+  revalidatePath(`/advertiser/offers/${oid}`);
+  return { ok: 'Added.' };
+}
+
+export async function updateLandingAdvertiser(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requireAdvertiser();
+  const oid = await ownOffer(fd, me.advertiserId);
+  if (!oid) return { error: 'Offer not found.' };
+  const err = await updateLandingPage(oid, fd);
+  if (err) return { error: err };
+  await audit(`advertiser:${me.advertiserId}`, 'update_landing_page', 'offer', oid,
+    { page: str(fd, 'lp_id'), split: str(fd, 'weight') || '0', status: str(fd, 'status') });
+  revalidatePath(`/advertiser/offers/${oid}`);
+  return { ok: 'Saved.' };
 }
 
 // ---- Custom tracking domains (owner always taken from the session) ----

@@ -398,4 +398,40 @@ export const migrations: { version: number; statements: string[] }[] = [
       `ALTER TABLE offers ADD COLUMN blocked_sources VARCHAR(255) NULL`,
     ],
   },
+  {
+    // IP/ASN protection, extra landing pages, click-log lookups.
+    version: 8,
+    statements: [
+      `ALTER TABLE clicks
+         ADD COLUMN asn INT UNSIGNED NULL,
+         ADD COLUMN asn_org VARCHAR(100) NOT NULL DEFAULT '',
+         ADD COLUMN ip_type VARCHAR(12) NOT NULL DEFAULT '',
+         ADD COLUMN lp_id BIGINT UNSIGNED NULL,
+         ADD KEY ix_click_pub_ts (publisher_id, ts),
+         ADD KEY ix_click_ip (ip, ts)`,
+      `ALTER TABLE conversions ADD COLUMN lp_id BIGINT UNSIGNED NULL`,
+      // rule: an IP, a CIDR range or an ASN ("AS12345").
+      `CREATE TABLE IF NOT EXISTS ip_blocks (
+        id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        rule       VARCHAR(50)  NOT NULL,
+        note       VARCHAR(200) NULL,
+        created_by VARCHAR(200) NOT NULL,
+        created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE KEY uq_ipblock_rule (rule)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+      // weight: % of visitors without a chosen page sent here (rest: offer default).
+      `CREATE TABLE IF NOT EXISTS offer_landing_pages (
+        id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        offer_id   BIGINT UNSIGNED NOT NULL,
+        name       VARCHAR(200) NOT NULL,
+        url        TEXT NOT NULL,
+        weight     TINYINT UNSIGNED NOT NULL DEFAULT 0,
+        status     VARCHAR(16) NOT NULL DEFAULT 'active',
+        created_by VARCHAR(200) NOT NULL,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        KEY ix_lp_offer (offer_id, status),
+        CONSTRAINT fk_lp_offer FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    ],
+  },
 ];
