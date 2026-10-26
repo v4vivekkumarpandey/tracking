@@ -1,4 +1,5 @@
 import { logout } from './actions';
+import { Logo } from './Logo';
 import { NavLink, type IconName } from './NavLink';
 
 export type NavSection = {
@@ -10,12 +11,11 @@ export type NavSection = {
 export function Shell({ panel, user, sections, children }: {
   panel: string; user: string; sections: NavSection[]; children: React.ReactNode;
 }) {
-  const brand = process.env.BRAND_NAME ?? 'Tracking';
   return (
     <div className="shell">
       <nav className="nav" aria-label="Main">
         <div className="brand">
-          <span className="brand-name">{brand}</span>
+          <Logo />
           <span className="brand-sub">{panel}</span>
         </div>
         {sections.map((s, i) => (

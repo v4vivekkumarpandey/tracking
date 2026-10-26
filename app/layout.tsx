@@ -3,7 +3,9 @@ import './globals.css';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = { title: 'Tracking Admin', robots: { index: false, follow: false } };
+export function generateMetadata(): Metadata {
+  return { title: `${process.env.BRAND_NAME ?? 'Tracking'} · Affiliate platform`, robots: { index: false, follow: false } };
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

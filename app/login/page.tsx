@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { login } from './actions';
+import { Logo } from '../_components/Logo';
 
 const MESSAGES: Record<string, string> = {
   '1': 'Wrong email or password.',
@@ -10,11 +11,10 @@ const MESSAGES: Record<string, string> = {
 
 export default async function LoginPage(props: { searchParams: Promise<{ error?: string; signup?: string }> }) {
   const sp = await props.searchParams;
-  const brand = process.env.BRAND_NAME ?? 'Tracking';
   return (
     <main className="login">
       <div className="auth-box">
-        <div className="auth-brand">{brand}<span>Affiliate platform</span></div>
+        <div className="auth-brand"><Logo height={36} /><span>Affiliate platform</span></div>
         <form action={login} className="card stack">
           <h1>Sign in</h1>
           {sp.signup && <p className="notice">Thanks for signing up! Your account is pending approval. You can sign in once it&apos;s approved.</p>}
