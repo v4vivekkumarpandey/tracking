@@ -12,6 +12,7 @@ type Pub = {
   id: number; name: string; company: string | null; email: string | null; country: string | null; website: string | null;
   traffic_sources: string | null; tax_id: string | null; payout_method: string | null; payout_details: string | null;
   status: string; kyc_status: string; created_at: Date; login: string | null; last_login_at: Date | null;
+  referred_by: number | null; referrer: string | null;
 };
 
 export default async function PublisherPage({ params }: { params: Promise<{ id: string }> }) {
@@ -19,8 +20,8 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
   const pid = Number((await params).id);
   if (!Number.isInteger(pid)) notFound();
   const [p] = await q<Pub>(
-    `SELECT p.*, u.email AS login, u.last_login_at FROM publishers p
-     LEFT JOIN users u ON u.publisher_id = p.id WHERE p.id = ?`, [pid],
+    `SELECT p.*, u.email AS login, u.last_login_at, r.name AS referrer FROM publishers p
+     LEFT JOIN users u ON u.publisher_id = p.id LEFT JOIN publishers r ON r.id = p.referred_by WHERE p.id = ?`, [pid],
   );
   if (!p) notFound();
 
@@ -67,7 +68,7 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
           <dt>Website</dt><dd>{p.website ? <a href={p.website} target="_blank" rel="noreferrer noopener">{p.website}</a> : '–'}</dd>
           <dt>Traffic</dt><dd className="wrap">{p.traffic_sources || '–'}</dd>
           <dt>Payment</dt><dd>{p.payout_method ? <><strong>{p.payout_method}</strong> <span className="mono">{p.payout_details}</span></> : <span className="muted">not provided</span>}{p.tax_id && <span className="muted"> · tax ID {p.tax_id}</span>}</dd>
-          <dt>Joined</dt><dd>{dateTime(p.created_at)}</dd>
+          <dt>Joined</dt><dd>{dateTime(p.created_at)}{p.referred_by && <> · referred by <Link href={`/admin/publishers/${p.referred_by}`}>{p.referrer}</Link></>}</dd>
         </dl>
       </div>
 
@@ -144,7 +145,7 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
         <h2>Payments</h2>
         {bal && (
           <p>
-            Approved {money(bal.approved)} − paid {money(bal.paid)} = <strong>balance {money(bal.balance)}</strong>
+            Approved {money(bal.approved)}{bal.referral > 0 && <> + referral {money(bal.referral)}</>} − paid {money(bal.paid)} = <strong>balance {money(bal.balance)}</strong>
             <span className="muted"> · pending {money(bal.pending)}</span>
           </p>
         )}

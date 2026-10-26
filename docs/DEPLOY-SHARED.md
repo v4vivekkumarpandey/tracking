@@ -25,6 +25,8 @@ Click IDs use the same format in both versions. With the same `CLICK_SECRET`, yo
 - New sign-ups stay **pending** until you approve them in **Admin → Approvals**. The red badge in the sidebar counts what's waiting.
 - Advertisers never see publisher identities or payouts, only "Publisher #id". Publishers never see revenue, your margin or advertisers' order IDs.
 - Accounts you create yourself in the admin panel: click **Create login** next to them to generate a temporary password to send them. Forgotten passwords work the same way: **Reset password**. Sending email isn't built in yet.
+- First thing after deploying: open **Admin → Settings** and fill in your company details (they're printed on invoices), referral % and duration, and optionally the default auto-approve days.
+- **Finance:** Admin → **Invoices** generates monthly advertiser invoices from approved conversions (Print / Save as PDF). Admin → **Payments** shows what you owe publishers, including referral commission.
 - **Visitor countries** come from the free DB-IP Lite database bundled in `apps/lite/data/`. Refresh it about once a month by running `node scripts/update-geoip.mjs`, then commit and push. The required "IP geolocation by DB-IP" credit appears at the bottom of the sidebar.
 - Publishers and advertisers can use **their own tracking domain** (e.g. `track.theirsite.com`). This needs a one-time Cloudflare setup; see [CUSTOM-DOMAINS.md](CUSTOM-DOMAINS.md).
 - Put **Join as a publisher** (`https://trk.ossaward.org/signup/publisher`) and **Advertise with us** (`/signup/advertiser`) links on your main website.

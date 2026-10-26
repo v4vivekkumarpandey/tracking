@@ -21,6 +21,7 @@ export default async function PublisherLayout({ children }: { children: React.Re
         ] },
         { title: 'Account', links: [
           { href: '/publisher/payments', icon: 'payments', label: 'Payments' },
+          { href: '/publisher/referrals', icon: 'referrals', label: 'Referrals' },
           { href: '/publisher/account', icon: 'account', label: 'Settings' },
         ] },
       ]}

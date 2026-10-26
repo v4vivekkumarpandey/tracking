@@ -23,6 +23,7 @@ export default async function PublisherPayments() {
         <Tile label="Balance (ready to pay)" value={money(bal?.balance ?? 0)} />
         <Tile label="Pending approval" value={money(bal?.pending ?? 0)} />
         <Tile label="Approved all-time" value={money(bal?.approved ?? 0)} />
+        {!!bal?.referral && <Tile label="Referral commission" value={money(bal.referral)} />}
         <Tile label="Paid all-time" value={money(bal?.paid ?? 0)} />
       </div>
       <div className="card table-wrap">

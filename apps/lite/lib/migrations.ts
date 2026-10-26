@@ -334,4 +334,52 @@ export const migrations: { version: number; statements: string[] }[] = [
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     ],
   },
+  {
+    // Settings, publisher referrals, advertiser invoices.
+    version: 6,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS settings (
+        k VARCHAR(64) NOT NULL PRIMARY KEY,
+        v TEXT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+      `ALTER TABLE publishers
+         ADD COLUMN referral_code VARCHAR(16) NULL,
+         ADD COLUMN referred_by BIGINT UNSIGNED NULL,
+         ADD UNIQUE KEY uq_pub_refcode (referral_code),
+         ADD KEY ix_pub_referred (referred_by)`,
+      `UPDATE publishers SET referral_code = LOWER(SUBSTRING(MD5(CONCAT(id, '-', RAND(), '-', NOW(6))), 1, 10)) WHERE referral_code IS NULL`,
+      `CREATE TABLE IF NOT EXISTS invoices (
+        id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        number        VARCHAR(32) NOT NULL,
+        advertiser_id BIGINT UNSIGNED NOT NULL,
+        period_from   DATE NOT NULL,
+        period_to     DATE NOT NULL,
+        subtotal      DECIMAL(14,2) NOT NULL,
+        tax_percent   DECIMAL(5,2) NOT NULL DEFAULT 0,
+        tax_amount    DECIMAL(14,2) NOT NULL DEFAULT 0,
+        total         DECIMAL(14,2) NOT NULL,
+        status        VARCHAR(16) NOT NULL DEFAULT 'draft',
+        issued_at     DATETIME(3) NULL,
+        due_at        DATE NULL,
+        paid_at       DATETIME(3) NULL,
+        notes         TEXT NULL,
+        created_at    DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE KEY uq_invoice_number (number),
+        KEY ix_invoice_adv (advertiser_id, status),
+        CONSTRAINT fk_invoice_adv FOREIGN KEY (advertiser_id) REFERENCES advertisers(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+      `CREATE TABLE IF NOT EXISTS invoice_lines (
+        id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        invoice_id  BIGINT UNSIGNED NOT NULL,
+        offer_id    BIGINT UNSIGNED NULL,
+        description VARCHAR(300) NOT NULL,
+        quantity    INT NOT NULL,
+        amount      DECIMAL(14,2) NOT NULL,
+        KEY ix_line_invoice (invoice_id),
+        CONSTRAINT fk_line_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+      // Each conversion is billed at most once.
+      `ALTER TABLE conversions ADD COLUMN invoice_id BIGINT UNSIGNED NULL, ADD KEY ix_conv_invoice (invoice_id)`,
+    ],
+  },
 ];
