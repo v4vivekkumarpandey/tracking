@@ -9,7 +9,7 @@ import { isoDate } from './format';
 
 export type Group = 'day' | 'offer' | 'publisher' | 'sub1';
 export type ReportRow = {
-  key: string; label: string; clicks: number; uniques: number; flagged: number;
+  key: string; label: string; clicks: number; uniques: number; flagged: number; redirected: number;
   conversions: number; approved: number; pending: number; revenue: number; payout: number;
 };
 
@@ -40,14 +40,16 @@ export async function runReport(scope: Scope, group: Group, from: string, toExcl
   const clickKey = { day: `DATE_FORMAT(t.hour, '%Y-%m-%d')`, offer: 'CAST(t.offer_id AS CHAR)', publisher: 'CAST(t.publisher_id AS CHAR)', sub1: '' }[group];
   const convKey = { day: `DATE_FORMAT(t.created_at, '%Y-%m-%d')`, offer: 'CAST(t.offer_id AS CHAR)', publisher: 'CAST(t.publisher_id AS CHAR)', sub1: 't.sub1' }[group];
 
+  // Clicks sent to a fallback URL (targeting/caps) count as "redirected", not as clicks.
   const clicksSql = group === 'sub1'
-    ? `SELECT t.sub1 AS k, COUNT(*) AS clicks, 0 AS uniques, SUM(t.is_bot OR t.is_duplicate) AS flagged
+    ? `SELECT t.sub1 AS k, SUM(t.redirect_reason IS NULL) AS clicks, 0 AS uniques,
+              SUM(t.redirect_reason IS NULL AND (t.is_bot OR t.is_duplicate)) AS flagged, SUM(t.redirect_reason IS NOT NULL) AS redirected
        FROM clicks t${s.join} WHERE t.ts >= ? AND t.ts < ?${s.sql} GROUP BY k`
-    : `SELECT ${clickKey} AS k, SUM(t.clicks) AS clicks, SUM(t.uniques) AS uniques, SUM(t.flagged) AS flagged
+    : `SELECT ${clickKey} AS k, SUM(t.clicks) AS clicks, SUM(t.uniques) AS uniques, SUM(t.flagged) AS flagged, SUM(t.redirected) AS redirected
        FROM stats_hourly t${s.join} WHERE t.hour >= ? AND t.hour < ?${s.sql} GROUP BY k`;
 
   const [clicks, convs, names] = await Promise.all([
-    q<{ k: string; clicks: string; uniques: string; flagged: string }>(clicksSql, [from, toExcl, ...s.params]),
+    q<{ k: string; clicks: string; uniques: string; flagged: string; redirected: string }>(clicksSql, [from, toExcl, ...s.params]),
     q<{ k: string; conversions: string; approved: string; pending: string; revenue: string; payout: string }>(
       `SELECT ${convKey} AS k, SUM(t.status <> 'rejected') AS conversions,
               SUM(t.status = 'approved') AS approved, SUM(t.status = 'pending') AS pending,
@@ -67,12 +69,12 @@ export async function runReport(scope: Scope, group: Group, from: string, toExcl
     let r = rows.get(k);
     if (!r) {
       const label = group === 'offer' || group === 'publisher' ? nameOf.get(k) ?? `#${k}` : k || '(empty)';
-      r = { key: k, label, clicks: 0, uniques: 0, flagged: 0, conversions: 0, approved: 0, pending: 0, revenue: 0, payout: 0 };
+      r = { key: k, label, clicks: 0, uniques: 0, flagged: 0, redirected: 0, conversions: 0, approved: 0, pending: 0, revenue: 0, payout: 0 };
       rows.set(k, r);
     }
     return r;
   };
-  for (const c of clicks) Object.assign(row(c.k ?? ''), { clicks: +c.clicks, uniques: +c.uniques, flagged: +c.flagged });
+  for (const c of clicks) Object.assign(row(c.k ?? ''), { clicks: +c.clicks, uniques: +c.uniques, flagged: +c.flagged, redirected: +c.redirected });
   for (const c of convs) Object.assign(row(c.k ?? ''), {
     conversions: +c.conversions, approved: +c.approved, pending: +c.pending, revenue: +c.revenue, payout: +c.payout,
   });
@@ -80,9 +82,9 @@ export async function runReport(scope: Scope, group: Group, from: string, toExcl
   const list = [...rows.values()].sort((a, b) =>
     group === 'day' ? b.key.localeCompare(a.key) : b.revenue - a.revenue || b.payout - a.payout || b.clicks - a.clicks);
   const total = list.reduce<ReportRow>((t, r) => ({
-    ...t, clicks: t.clicks + r.clicks, uniques: t.uniques + r.uniques, flagged: t.flagged + r.flagged,
+    ...t, clicks: t.clicks + r.clicks, uniques: t.uniques + r.uniques, flagged: t.flagged + r.flagged, redirected: t.redirected + r.redirected,
     conversions: t.conversions + r.conversions, approved: t.approved + r.approved, pending: t.pending + r.pending,
     revenue: t.revenue + r.revenue, payout: t.payout + r.payout,
-  }), { key: 'Total', label: 'Total', clicks: 0, uniques: 0, flagged: 0, conversions: 0, approved: 0, pending: 0, revenue: 0, payout: 0 });
+  }), { key: 'Total', label: 'Total', clicks: 0, uniques: 0, flagged: 0, redirected: 0, conversions: 0, approved: 0, pending: 0, revenue: 0, payout: 0 });
   return { rows: list, total };
 }

@@ -10,9 +10,10 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/clickid.test.ts tests/domains.test.ts tests/releaseA.test.ts"
+    "test": "node --test tests/clickid.test.ts tests/domains.test.ts tests/releaseA.test.ts tests/releaseB.test.ts"
   },
   "dependencies": {
+    "maxmind": "5.0.7",
     "mysql2": "3.24.6",
     "next": "15.5.28",
     "react": "19.1.10",

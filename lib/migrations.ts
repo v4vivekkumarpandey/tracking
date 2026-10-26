@@ -305,4 +305,33 @@ export const migrations: { version: number; statements: string[] }[] = [
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     ],
   },
+  {
+    // Geo/device targeting, caps with fallback, smart links.
+    version: 5,
+    statements: [
+      `ALTER TABLE offers
+         ADD COLUMN countries VARCHAR(500) NULL,
+         ADD COLUMN devices VARCHAR(64) NULL,
+         ADD COLUMN daily_cap INT NULL,
+         ADD COLUMN monthly_cap INT NULL,
+         ADD COLUMN daily_budget DECIMAL(12,2) NULL,
+         ADD COLUMN fallback_offer_id BIGINT UNSIGNED NULL,
+         ADD COLUMN fallback_url TEXT NULL`,
+      `ALTER TABLE clicks
+         ADD COLUMN device VARCHAR(16) NOT NULL DEFAULT '',
+         ADD COLUMN smart_link_id BIGINT UNSIGNED NULL,
+         ADD COLUMN redirect_reason VARCHAR(8) NULL`,
+      `ALTER TABLE stats_hourly ADD COLUMN redirected INT UNSIGNED NOT NULL DEFAULT 0`,
+      `CREATE TABLE IF NOT EXISTS smart_links (
+        id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        code         VARCHAR(32) NOT NULL,
+        publisher_id BIGINT UNSIGNED NOT NULL,
+        name         VARCHAR(200) NOT NULL,
+        status       VARCHAR(16) NOT NULL DEFAULT 'active',
+        created_at   DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE KEY uq_smart_code (code),
+        KEY ix_smart_pub (publisher_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    ],
+  },
 ];

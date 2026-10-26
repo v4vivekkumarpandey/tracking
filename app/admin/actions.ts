@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { audit, exec, q } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
+import { clearCapsCache } from '@/lib/caps';
 import { addCreative, deleteCreative } from '@/lib/creatives';
 import { refreshDomain, removeDomain, setDisabled, type DomainRow } from '@/lib/domains';
 import { clearLinkCache } from '@/lib/links';
@@ -195,8 +196,35 @@ export async function setConversionStatus(fd: FormData) {
 const OFFER_FIELDS = [
   'name', 'destination_url', 'description', 'payout_model', 'attribution_days', 'default_revenue', 'default_payout',
   'revenue_percent', 'payout_percent', 'deeplink_enabled', 'deeplink_param', 'auto_approve_days',
+  'countries', 'devices', 'daily_cap', 'monthly_cap', 'daily_budget', 'fallback_offer_id', 'fallback_url',
 ] as const;
 type OfferEdit = Record<(typeof OFFER_FIELDS)[number], string | number | null>;
+
+/** Targeting, caps and fallback from the edit form (throws readable errors). */
+function targeting(fd: FormData, oid: number) {
+  const codes = str(fd, 'countries').toUpperCase().split(/[\s,;]+/).filter(Boolean);
+  const bad = codes.find((c) => !/^[A-Z]{2}$/.test(c));
+  if (bad) throw new Error(`"${bad}" is not a 2-letter country code (e.g. US, GB, IN).`);
+  const devices = fd.getAll('devices').map(String).filter((d) => ['mobile', 'tablet', 'desktop'].includes(d));
+  const whole = (k: string) => {
+    const v = str(fd, k);
+    if (!v) return null;
+    if (!/^\d{1,9}$/.test(v)) throw new Error(`${k.replace('_', ' ')} must be a whole number.`);
+    return Number(v);
+  };
+  const fbOffer = whole('fallback_offer_id');
+  if (fbOffer === oid) throw new Error('An offer cannot be its own fallback.');
+  const fbUrl = str(fd, 'fallback_url');
+  return {
+    countries: codes.length ? [...new Set(codes)].join(',') : null,
+    devices: devices.length && devices.length < 3 ? devices.join(',') : null, // none or all = no restriction
+    daily_cap: whole('daily_cap'),
+    monthly_cap: whole('monthly_cap'),
+    daily_budget: optNum(fd, 'daily_budget'),
+    fallback_offer_id: fbOffer,
+    fallback_url: fbUrl ? httpURL(fbUrl) : null,
+  };
+}
 
 /** Saves the offer edit form; every changed field goes to the audit log as before → after. */
 export async function updateOffer(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
@@ -231,6 +259,7 @@ export async function updateOffer(_: { ok?: string; error?: string } | null, fd:
       deeplink_enabled: fd.get('deeplink_enabled') ? 1 : 0,
       deeplink_param: param,
       auto_approve_days: auto ? Number(auto) : null,
+      ...targeting(fd, oid),
     };
   } catch (e) {
     return { error: (e as Error).message };
@@ -251,6 +280,7 @@ export async function updateOffer(_: { ok?: string; error?: string } | null, fd:
   );
   await audit(me, 'edit', 'offer', oid, { changes });
   clearLinkCache();
+  clearCapsCache();
   revalidatePath(`/admin/offers/${oid}`);
   return { ok: `Saved ${Object.keys(changes).length} change${Object.keys(changes).length === 1 ? '' : 's'}.` };
 }

@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { parseClickId } from './clickid';
+import { parseClickId, type Click } from './clickid';
+import { fraudScore } from './fraud';
 import { exec, isDuplicate, q, tx } from './db';
 import { expand } from './macros';
 import { processOutbox } from './outbox';
@@ -18,7 +19,7 @@ const same = (a: string, b: string) =>
 const INSERT_SQL = `
 INSERT INTO conversions
   (click_id, click_time, offer_id, publisher_id, link_id, goal, txn_id, txn_key,
-   amount, revenue, payout, source, ip, sub1, sub2, sub3, sub4, sub5)
+   amount, revenue, payout, source, ip, fraud_score, fraud_reasons, sub1, sub2, sub3, sub4, sub5)
 SELECT ?, ?, o.id, ?, ?, ?, ?, NULLIF(?, ''),
   CAST(? AS DECIMAL(14,2)),
   ROUND(COALESCE(g.revenue,
@@ -27,7 +28,7 @@ SELECT ?, ?, o.id, ?, ?, ?, ?, NULLIF(?, ''),
   ROUND(COALESCE(a.payout_override, g.payout,
         CASE WHEN o.payout_percent IS NOT NULL THEN CAST(? AS DECIMAL(14,4)) * o.payout_percent / 100
              ELSE o.default_payout END), 2),
-  ?, ?,
+  ?, ?, ?, ?,
   COALESCE(c.sub1, ''), COALESCE(c.sub2, ''), COALESCE(c.sub3, ''), COALESCE(c.sub4, ''), COALESCE(c.sub5, '')
 FROM offers o
 LEFT JOIN offer_goals g ON g.offer_id = o.id AND g.code = ?
@@ -68,11 +69,13 @@ export async function recordConversion(params: URLSearchParams, source: 's2s' | 
     return reject(409, 'click outside attribution window');
   }
 
+  const risk = await scoreConversion(clickId, click);
+
   try {
     const id = await tx(async (t) => {
       const ins = await t.exec(INSERT_SQL, [
         clickId, click.time, click.publisherId, click.linkId, goal, txnId, txnId,
-        amount, amount, amount, source, ip,
+        amount, amount, amount, source, ip, risk.score, risk.reasons.join('; ').slice(0, 255) || null,
         goal, click.publisherId, clickId, click.offerId,
       ]);
       if (ins.affectedRows === 0) return 0;
@@ -109,6 +112,41 @@ export async function recordConversion(params: URLSearchParams, source: 's2s' | 
     if (isDuplicate(err)) return done(200, { status: 'duplicate' });
     console.error('insert conversion', err);
     return [500, { status: 'error' }];
+  }
+}
+
+/** Gathers fraud signals for a conversion; never fails the conversion itself. */
+async function scoreConversion(clickId: string, click: Click) {
+  try {
+    const [s] = await q<Record<string, string | Date | null>>(
+      `SELECT c.ts AS click_ts, c.is_bot AS bot, c.is_duplicate AS dup,
+              -- Same visitor IP (from the clicks), not the request IP: for S2S
+              -- postbacks the request comes from the advertiser's server.
+              (SELECT COUNT(*) FROM conversions cv JOIN clicks ck ON ck.click_id = cv.click_id
+               WHERE cv.offer_id = ? AND ck.ip = c.ip AND c.ip <> '' AND cv.created_at >= UTC_DATE()) AS same_ip,
+              (SELECT COALESCE(SUM(clicks), 0) FROM stats_hourly WHERE publisher_id = ? AND hour >= UTC_DATE()) AS pc_today,
+              (SELECT COUNT(*) FROM conversions WHERE publisher_id = ? AND created_at >= UTC_DATE()) AS pv_today,
+              (SELECT COALESCE(SUM(clicks), 0) FROM stats_hourly WHERE publisher_id = ? AND hour >= UTC_DATE() - INTERVAL 7 DAY AND hour < UTC_DATE()) AS pc_7d,
+              (SELECT COUNT(*) FROM conversions WHERE publisher_id = ? AND created_at >= UTC_DATE() - INTERVAL 7 DAY AND created_at < UTC_DATE()) AS pv_7d
+       FROM (SELECT 1) one LEFT JOIN clicks c ON c.click_id = ?`,
+      [click.offerId, click.publisherId, click.publisherId, click.publisherId, click.publisherId, clickId],
+    );
+    const retentionMs = Math.max(7, Number(process.env.CLICK_RETENTION_DAYS ?? 90)) * 86_400_000;
+    const pcToday = Number(s.pc_today), pvToday = Number(s.pv_today), pc7 = Number(s.pc_7d), pv7 = Number(s.pv_7d);
+    return fraudScore({
+      ctit: s.click_ts ? (Date.now() - new Date(s.click_ts as Date).getTime()) / 1000 : null,
+      clickExpected: Date.now() - click.time.getTime() < retentionMs,
+      clickBot: Number(s.bot) === 1,
+      clickDuplicate: Number(s.dup) === 1,
+      sameIpToday: Number(s.same_ip),
+      pubClicksToday: pcToday,
+      pubConvToday: pvToday + 1, // including this one
+      pubCrToday: pcToday ? (pvToday + 1) / pcToday : 0,
+      pubCr7d: pc7 ? pv7 / pc7 : 0,
+    });
+  } catch (e) {
+    console.error('fraud score', e);
+    return { score: 0, reasons: [] as string[] };
   }
 }
 

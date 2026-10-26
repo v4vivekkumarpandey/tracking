@@ -10,13 +10,20 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export default async function Dashboard() {
   const email = await requireAdmin();
-  const [offers, pending, [attention]] = await Promise.all([
+  const [offers, pending, [attention], risky] = await Promise.all([
     topOffers(new Date(), 10, ALL),
     pendingCounts(),
     q<{ conv: string; failed: string; active: string }>(
       `SELECT (SELECT COUNT(*) FROM conversions WHERE status = 'pending') AS conv,
               (SELECT COUNT(*) FROM outbox WHERE status = 'failed') AS failed,
               (SELECT COUNT(*) FROM offers WHERE status = 'active') AS active`,
+    ),
+    q<{ publisher_id: number; name: string; held: number; total: number; avg_score: string; reason: string | null }>(
+      `SELECT c.publisher_id, p.name, SUM(c.fraud_score >= 70) AS held, COUNT(*) AS total, AVG(c.fraud_score) AS avg_score,
+              SUBSTRING_INDEX(MAX(CASE WHEN c.fraud_score >= 70 THEN CONCAT(LPAD(c.fraud_score, 3, '0'), '|', c.fraud_reasons) END), '|', -1) AS reason
+       FROM conversions c JOIN publishers p ON p.id = c.publisher_id
+       WHERE c.created_at >= UTC_TIMESTAMP() - INTERVAL 7 DAY
+       GROUP BY c.publisher_id, p.name HAVING held > 0 ORDER BY held DESC LIMIT 10`,
     ),
   ]);
   const conv = Number(attention.conv);
@@ -68,6 +75,27 @@ export default async function Dashboard() {
         ]}
         chartMetrics={['revenue', 'payout', 'margin', 'conversions', 'clicks']}
       />
+
+      {risky.length > 0 && (
+        <section className="card table-wrap">
+          <h2>High-risk publishers (last 7 days)</h2>
+          <p className="muted">Publishers with conversions scored 70+ by fraud detection. Those conversions are held: never auto-approved, and flagged for the advertiser.</p>
+          <table>
+            <thead><tr><th>Publisher</th><th className="num">Held conversions</th><th className="num">All conversions</th><th className="num">Avg score</th><th>Top reason</th></tr></thead>
+            <tbody>
+              {risky.map((r) => (
+                <tr key={r.publisher_id}>
+                  <td><Link href={`/admin/publishers/${r.publisher_id}`}>{r.name}</Link></td>
+                  <td className="num error">{r.held}</td>
+                  <td className="num">{r.total}</td>
+                  <td className="num">{Math.round(Number(r.avg_score))}</td>
+                  <td className="wrap muted">{r.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       <OffersTable
         rows={offers}

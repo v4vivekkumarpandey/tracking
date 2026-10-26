@@ -6,6 +6,7 @@ import { creativesFor } from '@/lib/creatives';
 import { CURRENCY, dateTime, money, trackingBase } from '@/lib/format';
 import { CreativesManager } from '../../../_components/CreativesManager';
 import { addGoal, approvePublisher, deleteGoal, rejectAccess, reviewOffer, revokePublisher, setOfferStatus, setOfferVisibility } from '../../actions';
+import { TargetingSummary } from '../../../_components/TargetingSummary';
 import { EditOffer, type EditableOffer } from './EditOffer';
 
 type Offer = EditableOffer & {
@@ -22,7 +23,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
   );
   if (!o) notFound();
 
-  const [goals, access, publishers, history, creatives] = await Promise.all([
+  const [goals, access, publishers, history, creatives, otherOffers] = await Promise.all([
     q<{ code: string; name: string; revenue: string | null; payout: string | null }>(
       `SELECT code, name, revenue, payout FROM offer_goals WHERE offer_id = ? ORDER BY code`, [oid],
     ),
@@ -39,6 +40,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
        WHERE entity = 'offer' AND entity_id = ? ORDER BY id DESC LIMIT 50`, [oid],
     ),
     creativesFor(oid),
+    q<{ id: number; name: string }>(`SELECT id, name FROM offers WHERE status = 'active' ORDER BY name`),
   ]);
 
   const base = trackingBase();
@@ -57,6 +59,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           <span>Payout: <strong>{o.payout_percent ? `${o.payout_percent}% of sale` : money(o.default_payout)}</strong></span>
           <span>Attribution: <strong>{o.attribution_days} days</strong></span>
         </div>
+        <TargetingSummary o={o} />
         <div>Destination: <code>{o.destination_url}</code></div>
         {o.description && <div className="muted wrap">{o.description}</div>}
         {o.status === 'pending' && (
@@ -93,7 +96,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      <EditOffer o={o} />
+      <EditOffer o={o} otherOffers={otherOffers.filter((x) => x.id !== o.id)} />
 
       <div className="card stack">
         <h2>Give this to the advertiser</h2>
