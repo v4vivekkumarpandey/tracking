@@ -21,26 +21,27 @@ export default async function Payments() {
       <div className="crumb">Finance</div>
       <div className="title-row"><h1>Publisher payments</h1><a href="/export/admin/payments" className="button secondary-button">Download CSV</a></div>
       <p className="muted">
-        Balance = approved earnings − payments recorded. Pay through PayPal, Wise or bank, then record it here so the publisher sees it.
+        Balance = approved earnings + referral commission − payments recorded. Pay through PayPal, Wise or bank, then record it here so the publisher sees it.
       </p>
 
       <section className="card table-wrap">
         <h2>Balances owed ({owed.length})</h2>
         <table>
-          <thead><tr><th>Publisher</th><th>Payment details</th><th className="num">Approved</th><th className="num">Paid</th><th className="num">Balance</th><th className="num">Pending</th><th>Record payment</th></tr></thead>
+          <thead><tr><th>Publisher</th><th>Payment details</th><th className="num">Approved</th><th className="num">Referral</th><th className="num">Paid</th><th className="num">Balance</th><th className="num">Pending</th><th>Record payment</th></tr></thead>
           <tbody>
             {owed.map((r) => (
               <tr key={r.publisher_id}>
                 <td><Link href={`/admin/publishers/${r.publisher_id}`}>{r.name}</Link></td>
                 <td className="wrap">{r.payout_method ? <><strong>{r.payout_method}</strong><div className="muted mono">{r.payout_details}</div></> : <span className="error">Not provided</span>}</td>
                 <td className="num">{money(r.approved)}</td>
+                <td className="num">{money(r.referral)}</td>
                 <td className="num">{money(r.paid)}</td>
                 <td className="num"><strong>{money(r.balance)}</strong></td>
                 <td className="num muted">{money(r.pending)}</td>
                 <td><RecordPayment publisherId={r.publisher_id} amount={r.balance} method={r.payout_method} /></td>
               </tr>
             ))}
-            {owed.length === 0 && <tr><td colSpan={7} className="muted">No outstanding balances.</td></tr>}
+            {owed.length === 0 && <tr><td colSpan={8} className="muted">No outstanding balances.</td></tr>}
           </tbody>
         </table>
       </section>

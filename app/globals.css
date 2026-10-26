@@ -153,6 +153,26 @@ fieldset.checks { border: 1px solid var(--line); border-radius: 6px; padding: 6p
 fieldset.checks legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
 .edit-offer h3 { font-size: 14px; margin: 10px 0 0; }
 
+/* Invoices */
+.invoice { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 32px; max-width: 860px; }
+.invoice-actions { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.invoice-head { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 24px; }
+.invoice-brand { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+.invoice-meta { text-align: right; }
+.invoice-meta h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: .04em; text-transform: uppercase; }
+.invoice-to { margin-bottom: 20px; }
+.invoice-lines tfoot td { border-bottom: 0; }
+.invoice-total td { font-size: 16px; font-weight: 700; border-top: 2px solid var(--text) !important; }
+.invoice-terms { margin-top: 24px; font-size: 13px; color: var(--muted); }
+@media print {
+  body { background: #fff; color: #000; }
+  .nav, .no-print, .crumb { display: none !important; }
+  .shell { display: block; }
+  .content { padding: 0; max-width: none; }
+  .invoice { border: 0; padding: 0; max-width: none; }
+  a { color: #000; }
+}
+
 /* Creatives */
 .creative-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .creative { margin: 0; border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--subtle); }

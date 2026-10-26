@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { requestIp } from '@/lib/auth';
-import { isDuplicate, tx } from '@/lib/db';
+import { isDuplicate, q, tx } from '@/lib/db';
 import { MIN_PASSWORD, hashPassword } from '@/lib/password';
 import { allow } from '@/lib/ratelimit';
 import { randomBytes } from 'node:crypto';
@@ -39,12 +39,19 @@ export async function signupPublisher(_: SignupState, fd: FormData): Promise<Sig
   if (!traffic) return { error: 'Please tell us how you will promote offers.' };
 
   const hash = await hashPassword(c.password);
+  // Referral: only an existing, active publisher's code counts.
+  const ref = s(fd, 'ref', 16).toLowerCase();
+  const [referrer] = /^[a-z0-9]{6,16}$/.test(ref)
+    ? await q<{ id: number }>(`SELECT id FROM publishers WHERE referral_code = ? AND status = 'active'`, [ref])
+    : [];
+  const myCode = randomBytes(8).toString('hex').slice(0, 10);
   try {
     await tx(async (t) => {
       const p = await t.exec(
-        `INSERT INTO publishers (name, company, email, country, website, traffic_sources, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-        [name, s(fd, 'company') || null, c.email, /^[A-Z]{2}$/.test(country) ? country : null, c.website, traffic],
+        `INSERT INTO publishers (name, company, email, country, website, traffic_sources, status, referral_code, referred_by)
+         VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+        [name, s(fd, 'company') || null, c.email, /^[A-Z]{2}$/.test(country) ? country : null, c.website, traffic,
+         myCode, referrer ? Number(referrer.id) : null],
       );
       await t.exec(
         `INSERT INTO users (email, password_hash, role, publisher_id) VALUES (?, ?, 'publisher', ?)`,

@@ -8,7 +8,9 @@ import { requireAdmin } from '@/lib/auth';
 import { clearCapsCache } from '@/lib/caps';
 import { addCreative, deleteCreative } from '@/lib/creatives';
 import { refreshDomain, removeDomain, setDisabled, type DomainRow } from '@/lib/domains';
+import { generateInvoices, setInvoiceStatus } from '@/lib/invoices';
 import { clearLinkCache } from '@/lib/links';
+import { DEFAULTS, getSettings, saveSettings, type SettingKey, type Settings } from '@/lib/settings';
 import { hashPassword, tempPassword } from '@/lib/password';
 import { assertPublicUrl } from '@/lib/safeUrl';
 
@@ -56,8 +58,9 @@ export async function createPublisher(fd: FormData) {
   const me = await requireAdmin();
   const country = str(fd, 'country').toUpperCase();
   const res = await exec(
-    `INSERT INTO publishers (name, company, email, country, status) VALUES (?, ?, ?, ?, 'active')`,
-    [str(fd, 'name'), optStr(fd, 'company'), optStr(fd, 'email'), /^[A-Z]{2}$/.test(country) ? country : null],
+    `INSERT INTO publishers (name, company, email, country, status, referral_code) VALUES (?, ?, ?, ?, 'active', ?)`,
+    [str(fd, 'name'), optStr(fd, 'company'), optStr(fd, 'email'), /^[A-Z]{2}$/.test(country) ? country : null,
+     randomBytes(8).toString('hex').slice(0, 10)],
   );
   await audit(me, 'create', 'publisher', res.insertId);
   revalidatePath('/admin/publishers');
@@ -79,8 +82,8 @@ export async function createOffer(fd: FormData) {
   if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error('attribution days must be 1-365');
   const res = await exec(
     `INSERT INTO offers (advertiser_id, name, description, destination_url, payout_model,
-       default_revenue, default_payout, revenue_percent, payout_percent, attribution_days)
-     VALUES (?, ?, ?, ?, ?, COALESCE(?, 0), COALESCE(?, 0), ?, ?, ?)`,
+       default_revenue, default_payout, revenue_percent, payout_percent, attribution_days, auto_approve_days)
+     VALUES (?, ?, ?, ?, ?, COALESCE(?, 0), COALESCE(?, 0), ?, ?, ?, ?)`,
     [
       id(fd, 'advertiser_id'),
       str(fd, 'name'),
@@ -92,6 +95,7 @@ export async function createOffer(fd: FormData) {
       optNum(fd, 'revenue_percent'),
       optNum(fd, 'payout_percent'),
       days,
+      await defaultAutoApprove(),
     ],
   );
   await audit(me, 'create', 'offer', res.insertId);
@@ -333,9 +337,10 @@ export async function reviewOffer(fd: FormData) {
     const pct = optNum(fd, 'payout_percent');
     await exec(
       `UPDATE offers SET status = 'active', updated_at = NOW(3),
-              default_payout = COALESCE(?, default_payout), payout_percent = COALESCE(?, payout_percent)
+              default_payout = COALESCE(?, default_payout), payout_percent = COALESCE(?, payout_percent),
+              auto_approve_days = COALESCE(auto_approve_days, ?)
        WHERE id = ? AND status = 'pending'`,
-      [payout, pct, oid],
+      [payout, pct, await defaultAutoApprove(), oid],
     );
   } else {
     await exec(`UPDATE offers SET status = 'archived', updated_at = NOW(3) WHERE id = ? AND status = 'pending'`, [oid]);
@@ -430,6 +435,57 @@ export async function adminRemoveDomain(fd: FormData) {
     await audit(me, 'remove_domain', 'tracking_domain', d.id, { hostname: d.hostname });
   }
   revalidatePath('/admin/domains');
+}
+
+// ---------- Settings ----------
+
+/** Settings → default auto-approve days for new offers (null = off). */
+async function defaultAutoApprove(): Promise<number | null> {
+  const v = Number((await getSettings()).default_auto_approve_days);
+  return Number.isInteger(v) && v > 0 ? v : null;
+}
+
+export async function saveSettingsAction(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const v: Partial<Settings> = {};
+  for (const k of Object.keys(DEFAULTS) as SettingKey[]) v[k] = str(fd, k).slice(0, 2000);
+  const numeric = (k: SettingKey, max: number) => {
+    if (v[k] && (!/^\d+(\.\d{1,2})?$/.test(v[k]!) || Number(v[k]) > max)) throw new Error(`${k.replace(/_/g, ' ')} must be a number up to ${max}.`);
+  };
+  try {
+    numeric('referral_percent', 50); numeric('referral_months', 120); numeric('invoice_tax_percent', 100);
+    numeric('invoice_due_days', 365); numeric('default_auto_approve_days', 365);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  await saveSettings(v);
+  await audit(me, 'save_settings', 'settings', null);
+  revalidatePath('/admin', 'layout');
+  return { ok: 'Settings saved.' };
+}
+
+// ---------- Invoices ----------
+
+export async function generateInvoicesAction(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const from = str(fd, 'from'), to = str(fd, 'to');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return { error: 'Choose a valid period.' };
+  const adv = str(fd, 'advertiser_id') ? id(fd, 'advertiser_id') : null;
+  const res = await generateInvoices(from, to, adv);
+  await audit(me, 'generate_invoices', 'invoice', null, { from, to, created: res.created });
+  revalidatePath('/admin/invoices');
+  return res.created.length
+    ? { ok: `Created ${res.created.length} draft invoice${res.created.length === 1 ? '' : 's'}: ${res.created.join(', ')}.` }
+    : { error: 'Nothing to invoice: no approved, un-invoiced conversions in that period.' };
+}
+
+export async function setInvoiceStatusAction(fd: FormData) {
+  const me = await requireAdmin();
+  const iid = id(fd);
+  const status = oneOf(str(fd, 'status'), ['sent', 'paid', 'void'] as const);
+  await setInvoiceStatus(iid, status);
+  await audit(me, `invoice_${status}`, 'invoice', iid);
+  revalidatePath('/admin/invoices', 'layout');
 }
 
 // ---------- Payments ----------

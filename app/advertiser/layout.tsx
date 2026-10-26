@@ -23,7 +23,10 @@ export default async function AdvertiserLayout({ children }: { children: React.R
           { href: '/advertiser/reports', icon: 'reports', label: 'Reporting' },
           { href: '/advertiser/conversions', icon: 'conversions', label: 'Conversions', badge: Number(pending) },
         ] },
-        { title: 'Account', links: [{ href: '/advertiser/account', icon: 'account', label: 'Settings' }] },
+        { title: 'Account', links: [
+          { href: '/advertiser/invoices', icon: 'invoices', label: 'Invoices' },
+          { href: '/advertiser/account', icon: 'account', label: 'Settings' },
+        ] },
       ]}
     >
       {children}

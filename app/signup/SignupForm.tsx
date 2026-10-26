@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useActionState } from 'react';
 import { signupAdvertiser, signupPublisher, type SignupState } from './actions';
 
-export function SignupForm({ role }: { role: 'publisher' | 'advertiser' }) {
+export function SignupForm({ role, referral }: { role: 'publisher' | 'advertiser'; referral?: string }) {
   const [state, action, pending] = useActionState<SignupState, FormData>(
     role === 'publisher' ? signupPublisher : signupAdvertiser,
     null,
@@ -34,6 +34,7 @@ export function SignupForm({ role }: { role: 'publisher' | 'advertiser' }) {
           <textarea name="traffic_sources" rows={3} required maxLength={2000} />
         </label>
       )}
+      {isPub && referral && <input type="hidden" name="ref" value={referral} />}
       {/* Honeypot: hidden from people; bots fill it in. */}
       <input name="fax" tabIndex={-1} autoComplete="off" className="hp" aria-hidden="true" />
       <button type="submit" disabled={pending}>{pending ? 'Creating account…' : 'Create account'}</button>
