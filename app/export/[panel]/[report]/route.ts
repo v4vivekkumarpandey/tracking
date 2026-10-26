@@ -3,7 +3,8 @@ import { requireAdmin, requireAdvertiser, requirePublisher } from '@/lib/auth';
 import { csvResponse, toCsv, type Column } from '@/lib/csv';
 import { ALL, type Scope } from '@/lib/dashboard';
 import { q } from '@/lib/db';
-import { parseRange, runReport, type Group, type ReportRow } from '@/lib/reports';
+import { RAW_GROUPS, parseRange, runReport, type Group, type ReportRow } from '@/lib/reports';
+import { sourceLabel } from '@/lib/sourceLabels';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,7 @@ async function scopeFor(panel: Panel): Promise<Scope> {
 }
 
 const ALLOWED_GROUPS: Record<Panel, Group[]> = {
-  admin: ['day', 'offer', 'publisher'], publisher: ['day', 'offer', 'sub1'], advertiser: ['day', 'offer'],
+  admin: ['day', 'offer', 'publisher', 'source', 'channel'], publisher: ['day', 'offer', 'sub1', 'source', 'channel'], advertiser: ['day', 'offer', 'source', 'channel'],
 };
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ panel: string; report: string }> }) {
@@ -34,8 +35,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pane
   const sp = Object.fromEntries(req.nextUrl.searchParams);
 
   if (report === 'reports') {
-    const { from, to, toExcl } = parseRange(sp, p === 'publisher' ? 90 : 366);
     const group = (ALLOWED_GROUPS[p].includes(sp.group as Group) ? sp.group : 'day') as Group;
+    const { from, to, toExcl } = parseRange(sp, p === 'publisher' || RAW_GROUPS.includes(group) ? 90 : 366);
     const { rows, total } = await runReport(scope, group, from, toExcl);
     const cols: Column<ReportRow>[] = [
       { header: group, value: (r) => r.label },
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pane
     const filter = scope.kind === 'publisher' ? ' AND c.publisher_id = ?' : scope.kind === 'advertiser' ? ' AND o.advertiser_id = ?' : '';
     const rows = await q<Record<string, unknown>>(
       `SELECT c.id, c.created_at, c.click_time, c.offer_id, o.name AS offer, c.publisher_id, p.name AS publisher,
-              c.goal, c.txn_id, c.amount, c.revenue, c.payout, c.status, c.source, c.sub1, c.sub2, c.sub3, c.reject_reason
+              c.goal, c.txn_id, c.amount, c.revenue, c.payout, c.status, c.source, c.sub1, c.sub2, c.sub3, c.reject_reason, c.traffic_source
        FROM conversions c JOIN offers o ON o.id = c.offer_id JOIN publishers p ON p.id = c.publisher_id
        WHERE c.created_at >= ? AND c.created_at < ? AND (? IS NULL OR c.status = ?)${filter}
        ORDER BY c.id DESC LIMIT ${MAX_ROWS}`,
@@ -86,6 +87,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pane
       { header: 'publisher', value: (r) => `Publisher #${r.publisher_id}` }, { header: 'txn_id', value: s('txn_id') },
       { header: 'sale_amount', value: (r) => money(r.amount) }, { header: 'cost', value: (r) => money(r.revenue) },
     );
+    cols.push({ header: 'traffic_source', value: (r) => (r.traffic_source ? sourceLabel(String(r.traffic_source)) : '') });
     cols.push({ header: 'status', value: s('status') }, { header: 'reject_reason', value: s('reject_reason') });
     return csvResponse(toCsv(rows, cols), `conversions-${from}-to-${to}.csv`);
   }

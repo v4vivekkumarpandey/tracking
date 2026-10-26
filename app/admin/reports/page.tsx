@@ -1,14 +1,14 @@
 import { requireAdmin } from '@/lib/auth';
 import { ALL } from '@/lib/dashboard';
 import { count, money, pct } from '@/lib/format';
-import { parseRange, runReport, type Group } from '@/lib/reports';
+import { RAW_GROUPS, parseRange, runReport, type Group } from '@/lib/reports';
 
-const GROUPS: Partial<Record<Group, string>> = { day: 'Day', offer: 'Offer', publisher: 'Publisher' };
+const GROUPS: Partial<Record<Group, string>> = { day: 'Day', offer: 'Offer', publisher: 'Publisher', source: 'Traffic source', channel: 'Channel' };
 
 export default async function Reports(props: { searchParams: Promise<{ from?: string; to?: string; group?: string }> }) {
   await requireAdmin();
   const sp = await props.searchParams;
-  const { from, to, toExcl } = parseRange(sp);
+  const { from, to, toExcl } = parseRange(sp, sp.group && RAW_GROUPS.includes(sp.group as Group) ? 90 : undefined);
   const group = (sp.group && sp.group in GROUPS ? sp.group : 'day') as Group;
   const { rows, total } = await runReport(ALL, group, from, toExcl);
   const csv = `/export/admin/reports?from=${from}&to=${to}&group=${group}`;

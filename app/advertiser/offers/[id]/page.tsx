@@ -5,6 +5,8 @@ import { q } from '@/lib/db';
 import { creativesFor } from '@/lib/creatives';
 import { domainsFor } from '@/lib/domains';
 import { CreativesManager } from '../../../_components/CreativesManager';
+import { SourceBreakdown } from '../../../_components/SourceBreakdown';
+import { sourceLabel } from '@/lib/sourceLabels';
 import { count, money, pct, trackingBase } from '@/lib/format';
 
 export default async function AdvertiserOffer(props: { params: Promise<{ id: string }>; searchParams: Promise<{ submitted?: string }> }) {
@@ -12,9 +14,9 @@ export default async function AdvertiserOffer(props: { params: Promise<{ id: str
   const oid = Number((await props.params).id);
   const sp = await props.searchParams;
   if (!Number.isInteger(oid)) notFound();
-  const [o] = await q<{ id: number; name: string; description: string | null; destination_url: string; payout_model: string; default_revenue: string; revenue_percent: string | null; attribution_days: number; status: string; secret: string }>(
+  const [o] = await q<{ id: number; name: string; description: string | null; destination_url: string; payout_model: string; default_revenue: string; revenue_percent: string | null; attribution_days: number; status: string; secret: string; blocked_sources: string | null }>(
     `SELECT o.id, o.name, o.description, o.destination_url, o.payout_model, o.default_revenue, o.revenue_percent,
-            o.attribution_days, o.status, a.postback_secret AS secret
+            o.attribution_days, o.status, o.blocked_sources, a.postback_secret AS secret
      FROM offers o JOIN advertisers a ON a.id = o.advertiser_id WHERE o.id = ? AND o.advertiser_id = ?`,
     [oid, me.advertiserId],
   );
@@ -53,6 +55,9 @@ export default async function AdvertiserOffer(props: { params: Promise<{ id: str
           <div><span className="muted">Attribution</span><strong>{o.attribution_days} days</strong></div>
         </div>
         <div>Landing page: <code>{o.destination_url}</code></div>
+        {o.blocked_sources && (
+          <div>Not allowed: <span className="badge rejected">{o.blocked_sources.split(',').map(sourceLabel).join(', ')}</span> <span className="muted">conversions from these sources are held for your review</span></div>
+        )}
         {o.description && <p className="wrap muted">{o.description}</p>}
         {goals.length > 0 && (
           <table>
@@ -61,6 +66,8 @@ export default async function AdvertiserOffer(props: { params: Promise<{ id: str
           </table>
         )}
       </div>
+
+      <SourceBreakdown filter={{ offerId: o.id }} />
 
       <div className="card stack">
         <h2>Conversion tracking for this offer</h2>

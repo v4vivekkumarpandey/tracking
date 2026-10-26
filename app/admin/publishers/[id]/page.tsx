@@ -6,6 +6,7 @@ import { balances, paymentHistory } from '@/lib/balance';
 import { dateTime, money, trackingBase } from '@/lib/format';
 import { addPostback, deletePostback, setPublisherStatus } from '../../actions';
 import { RecordPayment } from '../../RecordPayment';
+import { SourceBreakdown } from '../../../_components/SourceBreakdown';
 import { ResetLogin } from '../../ResetLogin';
 
 type Pub = {
@@ -66,11 +67,13 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
           <dt>Login</dt><dd>{p.login ?? <span className="muted">none</span>}{p.last_login_at && <span className="muted"> · last sign-in {dateTime(p.last_login_at)}</span>}</dd>
           <dt>Contact</dt><dd>{[p.company, p.email, p.country].filter(Boolean).join(' · ') || '–'}</dd>
           <dt>Website</dt><dd>{p.website ? <a href={p.website} target="_blank" rel="noreferrer noopener">{p.website}</a> : '–'}</dd>
-          <dt>Traffic</dt><dd className="wrap">{p.traffic_sources || '–'}</dd>
+          <dt>Traffic (declared)</dt><dd className="wrap">{p.traffic_sources || '–'}</dd>
           <dt>Payment</dt><dd>{p.payout_method ? <><strong>{p.payout_method}</strong> <span className="mono">{p.payout_details}</span></> : <span className="muted">not provided</span>}{p.tax_id && <span className="muted"> · tax ID {p.tax_id}</span>}</dd>
           <dt>Joined</dt><dd>{dateTime(p.created_at)}{p.referred_by && <> · referred by <Link href={`/admin/publishers/${p.referred_by}`}>{p.referrer}</Link></>}</dd>
         </dl>
       </div>
+
+      <SourceBreakdown filter={{ publisherId: p.id }} title="Detected traffic sources (last 30 days)" />
 
       <div className="card">
         <h2>Tracking links</h2>

@@ -3,6 +3,7 @@ import { requireAdvertiser } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { dateTime, money } from '@/lib/format';
 import { approveConversions, rejectConversions } from '../actions';
+import { sourceLabel } from '@/lib/sourceLabels';
 import { RiskBadge } from '../../_components/RiskBadge';
 import { SelectAll } from './SelectAll';
 
@@ -15,8 +16,8 @@ export default async function AdvertiserConversions(props: { searchParams: Promi
   const me = await requireAdvertiser();
   const sp = await props.searchParams;
   const status = STATUSES.find((s) => s === sp.status) ?? null;
-  const rows = await q<{ id: number; created_at: Date; offer_id: number; offer: string; publisher_id: number; goal: string; txn_id: string; amount: string; revenue: string; status: string; reject_reason: string | null; approved_by: string | null; auto_at: Date | null; fraud_score: number; fraud_reasons: string | null }>(
-    `SELECT c.id, c.created_at, c.offer_id, o.name AS offer, c.publisher_id, c.goal, c.txn_id, c.amount, c.revenue, c.status, c.reject_reason,
+  const rows = await q<{ id: number; created_at: Date; offer_id: number; offer: string; publisher_id: number; goal: string; txn_id: string; amount: string; revenue: string; status: string; traffic_source: string; reject_reason: string | null; approved_by: string | null; auto_at: Date | null; fraud_score: number; fraud_reasons: string | null }>(
+    `SELECT c.id, c.created_at, c.offer_id, o.name AS offer, c.publisher_id, c.goal, c.txn_id, c.amount, c.revenue, c.status, c.traffic_source, c.reject_reason,
             c.approved_by, c.fraud_score, c.fraud_reasons, IF(o.auto_approve_days IS NULL OR c.fraud_score >= 70, NULL, c.created_at + INTERVAL o.auto_approve_days DAY) AS auto_at
      FROM conversions c JOIN offers o ON o.id = c.offer_id
      WHERE o.advertiser_id = ? AND (? IS NULL OR c.status = ?)
@@ -44,7 +45,7 @@ export default async function AdvertiserConversions(props: { searchParams: Promi
           <thead>
             <tr>
               <th><SelectAll form="review" /></th><th>ID</th><th>When</th><th>Offer</th><th>Event</th><th>Order ID</th>
-              <th>Publisher</th><th className="num">Sale</th><th className="num">Cost</th><th>Status</th>
+              <th>Publisher</th><th>Traffic</th><th className="num">Sale</th><th className="num">Cost</th><th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -57,6 +58,7 @@ export default async function AdvertiserConversions(props: { searchParams: Promi
                 <td>{c.goal || 'default'}</td>
                 <td className="mono">{c.txn_id}</td>
                 <td>Publisher #{c.publisher_id}</td>
+                <td>{sourceLabel(c.traffic_source)}</td>
                 <td className="num">{money(c.amount)}</td>
                 <td className="num">{money(c.revenue)}</td>
                 <td>
@@ -68,7 +70,7 @@ export default async function AdvertiserConversions(props: { searchParams: Promi
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={10} className="muted">No conversions.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={11} className="muted">No conversions.</td></tr>}
           </tbody>
         </table>
       </form>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requirePublisher } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { dateTime, money } from '@/lib/format';
+import { sourceLabel } from '@/lib/sourceLabels';
 
 const STATUSES = ['pending', 'approved', 'rejected'] as const;
 
@@ -11,8 +12,8 @@ export default async function PublisherConversions(props: { searchParams: Promis
   const me = await requirePublisher();
   const sp = await props.searchParams;
   const status = STATUSES.find((s) => s === sp.status) ?? null;
-  const rows = await q<{ id: number; created_at: Date; offer_id: number; offer: string; goal: string; sub1: string; sub2: string; payout: string; status: string; reject_reason: string | null }>(
-    `SELECT c.id, c.created_at, c.offer_id, o.name AS offer, c.goal, c.sub1, c.sub2, c.payout, c.status, c.reject_reason
+  const rows = await q<{ id: number; created_at: Date; offer_id: number; offer: string; goal: string; sub1: string; sub2: string; payout: string; status: string; traffic_source: string; fraud_reasons: string | null; reject_reason: string | null }>(
+    `SELECT c.id, c.created_at, c.offer_id, o.name AS offer, c.goal, c.sub1, c.sub2, c.payout, c.status, c.traffic_source, c.fraud_reasons, c.reject_reason
      FROM conversions c JOIN offers o ON o.id = c.offer_id
      WHERE c.publisher_id = ? AND (? IS NULL OR c.status = ?)
      ORDER BY c.id DESC LIMIT 500`,
@@ -29,7 +30,7 @@ export default async function PublisherConversions(props: { searchParams: Promis
       </div>
       <div className="card table-wrap">
         <table>
-          <thead><tr><th>ID</th><th>When</th><th>Offer</th><th>Event</th><th>sub1</th><th>sub2</th><th className="num">Payout</th><th>Status</th></tr></thead>
+          <thead><tr><th>ID</th><th>When</th><th>Offer</th><th>Event</th><th>sub1</th><th>sub2</th><th>Traffic</th><th className="num">Payout</th><th>Status</th></tr></thead>
           <tbody>
             {rows.map((c) => (
               <tr key={c.id}>
@@ -39,11 +40,15 @@ export default async function PublisherConversions(props: { searchParams: Promis
                 <td>{c.goal || 'default'}</td>
                 <td className="mono">{c.sub1}</td>
                 <td className="mono">{c.sub2}</td>
+                <td>{sourceLabel(c.traffic_source)}</td>
                 <td className="num">{money(c.payout)}</td>
-                <td><span className={`badge ${c.status}`}>{c.status}</span>{c.reject_reason && <div className="muted">{c.reject_reason}</div>}</td>
+                <td>
+                  <span className={`badge ${c.status}`}>{c.status}</span>{c.reject_reason && <div className="muted">{c.reject_reason}</div>}
+                  {c.status === 'pending' && c.fraud_reasons?.includes('disallowed traffic source') && <div className="muted">On hold: traffic source not allowed for this offer</div>}
+                </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={8} className="muted">No conversions yet.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={9} className="muted">No conversions yet.</td></tr>}
           </tbody>
         </table>
       </div>

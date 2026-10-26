@@ -17,12 +17,17 @@ export type Signals = {
   pubCr7d: number;
   pubClicksToday: number;
   pubConvToday: number;
+  /** Label of the click's traffic source if the offer disallows it. */
+  disallowedSource?: string | null;
 };
 
 export function fraudScore(s: Signals): { score: number; reasons: string[] } {
   let score = 0;
   const reasons: string[] = [];
   const add = (n: number, why: string) => { score += n; reasons.push(why); };
+
+  // An offer rule broken outright: hold for review regardless of other signals.
+  if (s.disallowedSource) add(HOLD, `disallowed traffic source: ${s.disallowedSource}`);
 
   if (s.ctit === null) {
     if (s.clickExpected) add(30, 'no click record');

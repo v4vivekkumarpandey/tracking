@@ -9,6 +9,8 @@ import { linkFor, type Link } from './links';
 import { expand } from './macros';
 import { BOT_UA, trunc, type TrackingContext } from './request';
 import { blockReason, type Block } from './routing';
+import { trackingBase } from './format';
+import { classify } from './trafficSource';
 
 // Shared by /c/{code} (tracking links) and /s/{code} (smart links):
 // targeting + caps with fallback, click recording, and the redirect.
@@ -51,7 +53,7 @@ export async function serveClick(req: NextRequest, link: Link, v: Visitor, opts:
     }
     const url = link.fallbackUrl || process.env.FALLBACK_URL;
     if (url) {
-      const clickId = await record(link, v, subs, opts.smartLinkId, reason);
+      const clickId = await record(link, v, subs, opts.smartLinkId, reason, req.nextUrl.searchParams);
       return finish(expand(url, macroValues(link, clickId, subs)));
     }
     // No fallback configured: better to send the visitor to the offer than nowhere.
@@ -60,7 +62,7 @@ export async function serveClick(req: NextRequest, link: Link, v: Visitor, opts:
 }
 
 async function redirectTo(req: NextRequest, link: Link, v: Visitor, subs: string[], smartLinkId: number | undefined, reason: Block) {
-  const clickId = await record(link, v, subs, smartLinkId, reason);
+  const clickId = await record(link, v, subs, smartLinkId, reason, req.nextUrl.searchParams);
   const url = req.nextUrl.searchParams.get('url');
   // Deep link (?url=…): only to the offer's own site, and only if allowed.
   const deep = link.deeplinkEnabled && url ? deepLinkTarget(url, link.destination, link.deeplinkParam, clickId) : null;
@@ -85,7 +87,7 @@ function finish(url: string) {
 const hourOf = (d: Date) => new Date(Math.floor(d.getTime() / 3_600_000) * 3_600_000);
 
 /** Records the click (never throws: a database hiccup must not block the visitor). */
-async function record(link: Link, v: Visitor, subs: string[], smartLinkId: number | undefined, reason: Block): Promise<string> {
+async function record(link: Link, v: Visitor, subs: string[], smartLinkId: number | undefined, reason: Block, params: URLSearchParams): Promise<string> {
   const now = new Date();
   const clickId = newClickId(link.offerId, link.publisherId, link.id, now);
   try {
@@ -96,12 +98,15 @@ async function record(link: Link, v: Visitor, subs: string[], smartLinkId: numbe
     const unique = !prev?.last;
     const isDup = !!prev?.last && now.getTime() - new Date(prev.last).getTime() < DUP_WINDOW_MS;
     const isBot = !v.ua || BOT_UA.test(v.ua);
+    const src = classify({ params, referer: v.referer, ua: v.ua, selfHost: new URL(trackingBase()).hostname });
     await exec(
       `INSERT INTO clicks (click_id, ts, offer_id, publisher_id, link_id, ip, ua, referer, country, device,
-                           sub1, sub2, sub3, sub4, sub5, is_bot, is_duplicate, smart_link_id, redirect_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                           sub1, sub2, sub3, sub4, sub5, is_bot, is_duplicate, smart_link_id, redirect_reason,
+                           traffic_source, traffic_channel, referer_host, source_evidence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [clickId, now, link.offerId, link.publisherId, link.id, v.ip, trunc(v.ua, 512), v.referer, v.country.slice(0, 2), v.device,
-       ...subs, isBot, isDup, smartLinkId ?? null, reason],
+       ...subs, isBot, isDup, smartLinkId ?? null, reason,
+       src.source, src.channel, src.refererHost.slice(0, 100), src.evidence.slice(0, 100)],
     );
     // A click sent to a fallback URL counts as "redirected", not as a click
     // on the offer, so the offer's conversion rate stays honest.

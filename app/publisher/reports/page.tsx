@@ -4,7 +4,7 @@ import { parseRange, runReport, type Group } from '@/lib/reports';
 
 // sub1 needs raw clicks, kept for CLICK_RETENTION_DAYS (90 by default), so
 // ranges are capped at 90 days.
-const GROUPS: Partial<Record<Group, string>> = { day: 'Day', offer: 'Offer', sub1: 'Sub ID 1' };
+const GROUPS: Partial<Record<Group, string>> = { day: 'Day', offer: 'Offer', sub1: 'Sub ID 1', source: 'Traffic source', channel: 'Channel' };
 
 export default async function PublisherReports(props: { searchParams: Promise<{ from?: string; to?: string; group?: string }> }) {
   const me = await requirePublisher();

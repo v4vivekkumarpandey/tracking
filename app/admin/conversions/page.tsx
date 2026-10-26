@@ -2,13 +2,14 @@ import Link from 'next/link';
 import { requireAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { dateTime, money } from '@/lib/format';
+import { sourceLabel } from '@/lib/sourceLabels';
 import { RiskBadge } from '../../_components/RiskBadge';
 import { setConversionStatus } from '../actions';
 
 type Conversion = {
   id: number; created_at: Date; click_time: Date; offer_id: number; offer: string;
   publisher_id: number; publisher: string; goal: string; txn_id: string; amount: string;
-  revenue: string; payout: string; status: string; source: string; sub1: string; reject_reason: string | null;
+  revenue: string; payout: string; status: string; source: string; traffic_source: string; sub1: string; reject_reason: string | null;
   fraud_score: number; fraud_reasons: string | null; approved_by: string | null;
 };
 
@@ -20,7 +21,7 @@ export default async function Conversions({ searchParams }: { searchParams: Prom
   const status = STATUSES.find((s) => s === sp.status) ?? null;
   const rows = await q<Conversion>(
     `SELECT c.id, c.created_at, c.click_time, c.offer_id, o.name AS offer, c.publisher_id, p.name AS publisher,
-            c.goal, c.txn_id, c.amount, c.revenue, c.payout, c.status, c.source, c.sub1, c.reject_reason, c.fraud_score, c.fraud_reasons, c.approved_by
+            c.goal, c.txn_id, c.amount, c.revenue, c.payout, c.status, c.source, c.traffic_source, c.sub1, c.reject_reason, c.fraud_score, c.fraud_reasons, c.approved_by
      FROM conversions c
      JOIN offers o ON o.id = c.offer_id
      JOIN publishers p ON p.id = c.publisher_id
@@ -43,7 +44,7 @@ export default async function Conversions({ searchParams }: { searchParams: Prom
             <tr>
               <th>ID</th><th>When</th><th>Offer / Publisher</th><th>Goal · Txn</th>
               <th className="num">Sale</th><th className="num">Revenue</th><th className="num">Payout</th>
-              <th>Source</th><th>Status</th><th></th>
+              <th>Traffic · via</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -59,7 +60,7 @@ export default async function Conversions({ searchParams }: { searchParams: Prom
                 <td className="num">{money(c.amount)}</td>
                 <td className="num">{money(c.revenue)}</td>
                 <td className="num">{money(c.payout)}</td>
-                <td>{c.source}</td>
+                <td>{sourceLabel(c.traffic_source)}<div className="muted">{c.source}</div></td>
                 <td>
                   <span className={`badge ${c.status}`}>{c.status}</span>
                   {c.reject_reason && <div className="muted">{c.reject_reason}</div>}
