@@ -1,6 +1,7 @@
 import type { Invoice } from '@/lib/invoices';
 import { money } from '@/lib/format';
 import type { Settings } from '@/lib/settings';
+import { Logo } from './Logo';
 import { PrintButton } from './PrintButton';
 
 const d = (v: Date | null) => (v ? new Date(v).toISOString().slice(0, 10) : '–');
@@ -15,6 +16,7 @@ export function InvoiceView({ inv, lines, s }: {
       <div className="invoice-actions no-print"><PrintButton /></div>
       <header className="invoice-head">
         <div>
+          <Logo />
           <div className="invoice-brand">{brand}</div>
           {s.company_address && <div className="wrap">{s.company_address}</div>}
           {s.company_tax_id && <div>Tax ID: {s.company_tax_id}</div>}
