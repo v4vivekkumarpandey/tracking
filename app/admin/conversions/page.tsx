@@ -29,7 +29,7 @@ export default async function Conversions({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <h1>Conversions</h1>
+      <div className="title-row"><h1>Conversions</h1><a href={`/export/admin/conversions${status ? `?status=${status}` : ''}`} className="button secondary-button">Download CSV (30 days)</a></div>
       <div className="row" style={{ marginBottom: 12 }}>
         <Link href="/admin/conversions">All</Link>
         {STATUSES.map((s) => <Link key={s} href={`/admin/conversions?status=${s}`}>{s}</Link>)}

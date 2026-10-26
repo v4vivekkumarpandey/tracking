@@ -22,7 +22,7 @@ export default async function PublisherConversions(props: { searchParams: Promis
   return (
     <>
       <div className="crumb">Reporting</div>
-      <h1>Conversions</h1>
+      <div className="title-row"><h1>Conversions</h1><a href={`/export/publisher/conversions${status ? `?status=${status}` : ''}`} className="button secondary-button">Download CSV (30 days)</a></div>
       <div className="tabs">
         <Link href="/publisher/conversions" className={!status ? 'active' : undefined}>All</Link>
         {STATUSES.map((s) => <Link key={s} href={`/publisher/conversions?status=${s}`} className={status === s ? 'active' : undefined}>{s}</Link>)}

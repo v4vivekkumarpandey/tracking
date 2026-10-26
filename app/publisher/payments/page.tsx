@@ -15,7 +15,7 @@ export default async function PublisherPayments() {
   return (
     <>
       <div className="crumb">Account</div>
-      <h1>Payments</h1>
+      <div className="title-row"><h1>Payments</h1><a href="/export/publisher/payments" className="button secondary-button">Download CSV</a></div>
       {!acct?.payout_method && (
         <div className="banner">Add your payment details in <Link href="/publisher/account">Settings</Link> so we can pay you.</div>
       )}

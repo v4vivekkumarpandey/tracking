@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { audit, exec, q } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
+import { addCreative, deleteCreative } from '@/lib/creatives';
 import { refreshDomain, removeDomain, setDisabled, type DomainRow } from '@/lib/domains';
 import { clearLinkCache } from '@/lib/links';
 import { hashPassword, tempPassword } from '@/lib/password';
@@ -182,11 +183,103 @@ export async function setConversionStatus(fd: FormData) {
   const cid = id(fd);
   const status = oneOf(str(fd, 'status'), ['pending', 'approved', 'rejected'] as const);
   await exec(
-    `UPDATE conversions SET status = ?, reject_reason = ?, updated_at = NOW(3) WHERE id = ?`,
-    [status, status === 'rejected' ? optStr(fd, 'reason') : null, cid],
+    `UPDATE conversions SET status = ?, reject_reason = ?, approved_by = ?, updated_at = NOW(3) WHERE id = ?`,
+    [status, status === 'rejected' ? optStr(fd, 'reason') : null, status === 'approved' ? 'admin' : null, cid],
   );
   await audit(me, 'set_status', 'conversion', cid, { status });
   revalidatePath('/admin/conversions');
+}
+
+// ---------- Edit offer ----------
+
+const OFFER_FIELDS = [
+  'name', 'destination_url', 'description', 'payout_model', 'attribution_days', 'default_revenue', 'default_payout',
+  'revenue_percent', 'payout_percent', 'deeplink_enabled', 'deeplink_param', 'auto_approve_days',
+] as const;
+type OfferEdit = Record<(typeof OFFER_FIELDS)[number], string | number | null>;
+
+/** Saves the offer edit form; every changed field goes to the audit log as before → after. */
+export async function updateOffer(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const oid = id(fd);
+  const [cur] = await q<OfferEdit>(`SELECT ${OFFER_FIELDS.join(', ')} FROM offers WHERE id = ?`, [oid]);
+  if (!cur) return { error: 'Offer not found.' };
+
+  let next: OfferEdit;
+  try {
+    const days = Number(str(fd, 'attribution_days') || 30);
+    if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error('Attribution window must be 1–365 days.');
+    const auto = str(fd, 'auto_approve_days');
+    if (auto && !/^\d{1,3}$/.test(auto)) throw new Error('Auto-approve days must be a whole number.');
+    const param = str(fd, 'deeplink_param') || 'click_id';
+    if (!/^[A-Za-z0-9_]{1,32}$/.test(param)) throw new Error('Deep-link parameter: letters, numbers and _ only.');
+    const pct = (k: string) => {
+      const v = optNum(fd, k);
+      if (v && Number(v) > 100) throw new Error('Percentages must be 100 or less.');
+      return v;
+    };
+    next = {
+      name: str(fd, 'name') || (() => { throw new Error('Name is required.'); })(),
+      destination_url: httpURL(str(fd, 'destination_url')),
+      description: optStr(fd, 'description'),
+      payout_model: oneOf(str(fd, 'payout_model'), ['CPA', 'CPS', 'CPL', 'CPI'] as const),
+      attribution_days: days,
+      default_revenue: optNum(fd, 'default_revenue') ?? '0',
+      default_payout: optNum(fd, 'default_payout') ?? '0',
+      revenue_percent: pct('revenue_percent'),
+      payout_percent: pct('payout_percent'),
+      deeplink_enabled: fd.get('deeplink_enabled') ? 1 : 0,
+      deeplink_param: param,
+      auto_approve_days: auto ? Number(auto) : null,
+    };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+
+  // Compare numbers as numbers ("40.00" vs "40") and everything else as text.
+  const same = (a: unknown, b: unknown) =>
+    a === null || a === undefined || b === null || b === undefined ? (a ?? null) === (b ?? null)
+    : !isNaN(Number(a)) && !isNaN(Number(b)) && String(a).trim() !== '' ? Number(a) === Number(b)
+    : String(a) === String(b);
+  const changes: Record<string, [unknown, unknown]> = {};
+  for (const f of OFFER_FIELDS) if (!same(cur[f], next[f])) changes[f] = [cur[f], next[f]];
+  if (Object.keys(changes).length === 0) return { ok: 'No changes.' };
+
+  await exec(
+    `UPDATE offers SET ${Object.keys(changes).map((f) => `${f} = ?`).join(', ')}, updated_at = NOW(3) WHERE id = ?`,
+    [...Object.keys(changes).map((f) => next[f as keyof OfferEdit]), oid],
+  );
+  await audit(me, 'edit', 'offer', oid, { changes });
+  clearLinkCache();
+  revalidatePath(`/admin/offers/${oid}`);
+  return { ok: `Saved ${Object.keys(changes).length} change${Object.keys(changes).length === 1 ? '' : 's'}.` };
+}
+
+export async function uploadCreativeAdmin(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const oid = id(fd, 'offer_id');
+  const err = await addCreative(oid, fd, 'admin');
+  if (err) return { error: err };
+  await audit(me, 'add_creative', 'offer', oid);
+  revalidatePath(`/admin/offers/${oid}`);
+  return { ok: 'Added.' };
+}
+
+export async function deleteCreativeAdmin(fd: FormData) {
+  const me = await requireAdmin();
+  const oid = id(fd, 'offer_id');
+  await deleteCreative(id(fd), oid);
+  await audit(me, 'delete_creative', 'offer', oid);
+  revalidatePath(`/admin/offers/${oid}`);
+}
+
+export async function deleteGoal(fd: FormData) {
+  const me = await requireAdmin();
+  const oid = id(fd, 'offer_id');
+  const code = str(fd, 'code');
+  await exec(`DELETE FROM offer_goals WHERE offer_id = ? AND code = ?`, [oid, code]);
+  await audit(me, 'delete_goal', 'offer', oid, { code });
+  revalidatePath(`/admin/offers/${oid}`);
 }
 
 // ---------- Approvals ----------

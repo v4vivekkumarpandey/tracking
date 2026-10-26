@@ -3,6 +3,7 @@ import { newClickId } from '@/lib/clickid';
 import { exec, q } from '@/lib/db';
 import { getLink } from '@/lib/links';
 import { expand } from '@/lib/macros';
+import { deepLinkTarget } from '@/lib/deeplink';
 import { activeDomainOwner } from '@/lib/domains';
 import { BOT_UA, trackingContext, trunc } from '@/lib/request';
 
@@ -86,7 +87,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
     console.error('record click', err);
   }
 
-  const res = NextResponse.redirect(expand(link.destination, vals), 302);
+  // Deep link (?url=…): only to the offer's own site, and only if the offer
+  // allows it; anything else falls back to the normal landing page.
+  const deep = link.deeplinkEnabled && sp.get('url')
+    ? deepLinkTarget(sp.get('url')!, link.destination, link.deeplinkParam, clickId)
+    : null;
+  const res = NextResponse.redirect(deep ?? expand(link.destination, vals), 302);
   res.headers.set('Cache-Control', 'no-store');
   res.headers.set('Referrer-Policy', 'no-referrer-when-downgrade');
   return res;

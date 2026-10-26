@@ -271,4 +271,38 @@ export const migrations: { version: number; statements: string[] }[] = [
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     ],
   },
+  {
+    // Deep links, auto-approve, who approved, fraud score (filled in later), creatives.
+    version: 4,
+    statements: [
+      `ALTER TABLE offers
+         ADD COLUMN deeplink_enabled TINYINT(1) NOT NULL DEFAULT 0,
+         ADD COLUMN deeplink_param VARCHAR(32) NOT NULL DEFAULT 'click_id',
+         ADD COLUMN auto_approve_days INT NULL`,
+      `ALTER TABLE conversions
+         ADD COLUMN approved_by VARCHAR(16) NULL,
+         ADD COLUMN fraud_score TINYINT UNSIGNED NOT NULL DEFAULT 0,
+         ADD COLUMN fraud_reasons VARCHAR(255) NULL,
+         ADD KEY ix_conv_autoapprove (status, offer_id, created_at)`,
+      // Banners live in MySQL: files written to the app folder would be lost
+      // on every Hostinger redeploy.
+      `CREATE TABLE IF NOT EXISTS creatives (
+        id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        offer_id   BIGINT UNSIGNED NOT NULL,
+        kind       VARCHAR(16)  NOT NULL,
+        name       VARCHAR(200) NOT NULL,
+        mime       VARCHAR(32)  NULL,
+        width      INT NULL,
+        height     INT NULL,
+        size       INT NULL,
+        public_key CHAR(32) NOT NULL,
+        data       MEDIUMBLOB NULL,
+        body       TEXT NULL,
+        created_by VARCHAR(40) NOT NULL,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        KEY ix_creative_offer (offer_id),
+        CONSTRAINT fk_creative_offer FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    ],
+  },
 ];

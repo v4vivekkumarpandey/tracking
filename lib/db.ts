@@ -53,7 +53,7 @@ async function migrate() {
   }
 }
 
-type Param = string | number | boolean | Date | null;
+type Param = string | number | boolean | Date | Buffer | null;
 
 /** SELECT: returns rows. DECIMAL comes back as a string, keeping money exact. */
 export async function q<T = Record<string, unknown>>(sql: string, params: Param[] = []): Promise<T[]> {
