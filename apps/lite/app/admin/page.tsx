@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { ALL, topOffers } from '@/lib/dashboard';
 import { pendingCounts } from '@/lib/queue';
+import { sourceLabel } from '@/lib/sourceLabels';
 import { OffersTable } from '../_components/OffersTable';
 import { StatsOverview } from '../_components/StatsOverview';
 
@@ -10,7 +11,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export default async function Dashboard() {
   const email = await requireAdmin();
-  const [offers, pending, [attention], risky] = await Promise.all([
+  const [offers, pending, [attention], risky, disallowed] = await Promise.all([
     topOffers(new Date(), 10, ALL),
     pendingCounts(),
     q<{ conv: string; failed: string; active: string }>(
@@ -24,6 +25,13 @@ export default async function Dashboard() {
        FROM conversions c JOIN publishers p ON p.id = c.publisher_id
        WHERE c.created_at >= UTC_TIMESTAMP() - INTERVAL 7 DAY
        GROUP BY c.publisher_id, p.name HAVING held > 0 ORDER BY held DESC LIMIT 10`,
+    ),
+    q<{ publisher_id: number; publisher: string; offer_id: number; offer: string; traffic_source: string; n: number; pending: number }>(
+      `SELECT c.publisher_id, p.name AS publisher, c.offer_id, o.name AS offer, c.traffic_source,
+              COUNT(*) AS n, SUM(c.status = 'pending') AS pending
+       FROM conversions c JOIN publishers p ON p.id = c.publisher_id JOIN offers o ON o.id = c.offer_id
+       WHERE c.created_at >= UTC_TIMESTAMP() - INTERVAL 7 DAY AND c.fraud_reasons LIKE '%disallowed traffic source%'
+       GROUP BY c.publisher_id, p.name, c.offer_id, o.name, c.traffic_source ORDER BY n DESC LIMIT 20`,
     ),
   ]);
   const conv = Number(attention.conv);
@@ -90,6 +98,27 @@ export default async function Dashboard() {
                   <td className="num">{r.total}</td>
                   <td className="num">{Math.round(Number(r.avg_score))}</td>
                   <td className="wrap muted">{r.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {disallowed.length > 0 && (
+        <section className="card table-wrap">
+          <h2>Disallowed traffic (last 7 days)</h2>
+          <p className="muted">Conversions from traffic sources the offer does not allow. They are held for review and never auto-approved.</p>
+          <table>
+            <thead><tr><th>Publisher</th><th>Offer</th><th>Source</th><th className="num">Conversions</th><th className="num">Still pending</th></tr></thead>
+            <tbody>
+              {disallowed.map((r) => (
+                <tr key={`${r.publisher_id}-${r.offer_id}-${r.traffic_source}`}>
+                  <td><Link href={`/admin/publishers/${r.publisher_id}`}>{r.publisher}</Link></td>
+                  <td><Link href={`/admin/offers/${r.offer_id}`}>{r.offer}</Link></td>
+                  <td>{sourceLabel(r.traffic_source)}</td>
+                  <td className="num error">{r.n}</td>
+                  <td className="num">{Number(r.pending) ? <Link href="/admin/conversions?status=pending">{r.pending}</Link> : 0}</td>
                 </tr>
               ))}
             </tbody>

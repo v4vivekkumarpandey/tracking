@@ -13,6 +13,7 @@ import { clearLinkCache } from '@/lib/links';
 import { DEFAULTS, getSettings, saveSettings, type SettingKey, type Settings } from '@/lib/settings';
 import { hashPassword, tempPassword } from '@/lib/password';
 import { assertPublicUrl } from '@/lib/safeUrl';
+import { RESTRICTABLE } from '@/lib/sourceLabels';
 
 function str(fd: FormData, k: string): string {
   return String(fd.get(k) ?? '').trim();
@@ -200,7 +201,7 @@ export async function setConversionStatus(fd: FormData) {
 const OFFER_FIELDS = [
   'name', 'destination_url', 'description', 'payout_model', 'attribution_days', 'default_revenue', 'default_payout',
   'revenue_percent', 'payout_percent', 'deeplink_enabled', 'deeplink_param', 'auto_approve_days',
-  'countries', 'devices', 'daily_cap', 'monthly_cap', 'daily_budget', 'fallback_offer_id', 'fallback_url',
+  'countries', 'devices', 'daily_cap', 'monthly_cap', 'daily_budget', 'fallback_offer_id', 'fallback_url', 'blocked_sources',
 ] as const;
 type OfferEdit = Record<(typeof OFFER_FIELDS)[number], string | number | null>;
 
@@ -227,6 +228,7 @@ function targeting(fd: FormData, oid: number) {
     daily_budget: optNum(fd, 'daily_budget'),
     fallback_offer_id: fbOffer,
     fallback_url: fbUrl ? httpURL(fbUrl) : null,
+    blocked_sources: RESTRICTABLE.filter((s) => fd.getAll('blocked_sources').includes(s)).join(',') || null,
   };
 }
 

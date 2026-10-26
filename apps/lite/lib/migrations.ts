@@ -382,4 +382,20 @@ export const migrations: { version: number; statements: string[] }[] = [
       `ALTER TABLE conversions ADD COLUMN invoice_id BIGINT UNSIGNED NULL, ADD KEY ix_conv_invoice (invoice_id)`,
     ],
   },
+  {
+    // Traffic-source detection and per-offer disallowed sources.
+    version: 7,
+    statements: [
+      `ALTER TABLE clicks
+         ADD COLUMN traffic_source VARCHAR(24) NOT NULL DEFAULT '',
+         ADD COLUMN traffic_channel VARCHAR(16) NOT NULL DEFAULT '',
+         ADD COLUMN referer_host VARCHAR(100) NOT NULL DEFAULT '',
+         ADD COLUMN source_evidence VARCHAR(100) NOT NULL DEFAULT ''`,
+      `ALTER TABLE conversions
+         ADD COLUMN traffic_source VARCHAR(24) NOT NULL DEFAULT '',
+         ADD COLUMN traffic_channel VARCHAR(16) NOT NULL DEFAULT '',
+         ADD KEY ix_conv_source (publisher_id, traffic_source)`,
+      `ALTER TABLE offers ADD COLUMN blocked_sources VARCHAR(255) NULL`,
+    ],
+  },
 ];

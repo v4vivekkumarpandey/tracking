@@ -1,13 +1,13 @@
 import { requireAdvertiser } from '@/lib/auth';
 import { count, money, pct } from '@/lib/format';
-import { parseRange, runReport, type Group } from '@/lib/reports';
+import { RAW_GROUPS, parseRange, runReport, type Group } from '@/lib/reports';
 
-const GROUPS: Partial<Record<Group, string>> = { day: 'Day', offer: 'Offer' };
+const GROUPS: Partial<Record<Group, string>> = { day: 'Day', offer: 'Offer', source: 'Traffic source', channel: 'Channel' };
 
 export default async function AdvertiserReports(props: { searchParams: Promise<{ from?: string; to?: string; group?: string }> }) {
   const me = await requireAdvertiser();
   const sp = await props.searchParams;
-  const { from, to, toExcl } = parseRange(sp);
+  const { from, to, toExcl } = parseRange(sp, sp.group && RAW_GROUPS.includes(sp.group as Group) ? 90 : undefined);
   const group = (sp.group && sp.group in GROUPS ? sp.group : 'day') as Group;
   const { rows, total } = await runReport({ kind: 'advertiser', id: me.advertiserId }, group, from, toExcl);
 

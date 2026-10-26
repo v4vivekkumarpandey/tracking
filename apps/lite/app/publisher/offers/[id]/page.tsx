@@ -21,10 +21,10 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
     id: number; name: string; description: string | null; payout_model: string; attribution_days: number;
     default_payout: string; payout_percent: string | null; payout_override: string | null; access: string | null; code: string | null;
     deeplink_enabled: number; destination_url: string;
-    countries: string | null; devices: string | null; daily_cap: number | null; monthly_cap: number | null;
+    countries: string | null; devices: string | null; daily_cap: number | null; monthly_cap: number | null; blocked_sources: string | null;
   }>(
     `SELECT o.id, o.name, o.description, o.payout_model, o.attribution_days, o.default_payout, o.payout_percent,
-            o.deeplink_enabled, o.destination_url, o.countries, o.devices, o.daily_cap, o.monthly_cap,
+            o.deeplink_enabled, o.destination_url, o.countries, o.devices, o.daily_cap, o.monthly_cap, o.blocked_sources,
             a.payout_override, a.status AS access, l.code
      FROM offers o
      LEFT JOIN publisher_offer_access a ON a.offer_id = o.id AND a.publisher_id = ?

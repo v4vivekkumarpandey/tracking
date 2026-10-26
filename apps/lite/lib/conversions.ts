@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { parseClickId, type Click } from './clickid';
 import { fraudScore } from './fraud';
+import { sourceLabel } from './sourceLabels';
 import { exec, isDuplicate, q, tx } from './db';
 import { expand } from './macros';
 import { processOutbox } from './outbox';
@@ -19,7 +20,8 @@ const same = (a: string, b: string) =>
 const INSERT_SQL = `
 INSERT INTO conversions
   (click_id, click_time, offer_id, publisher_id, link_id, goal, txn_id, txn_key,
-   amount, revenue, payout, source, ip, fraud_score, fraud_reasons, sub1, sub2, sub3, sub4, sub5)
+   amount, revenue, payout, source, ip, fraud_score, fraud_reasons, sub1, sub2, sub3, sub4, sub5,
+   traffic_source, traffic_channel)
 SELECT ?, ?, o.id, ?, ?, ?, ?, NULLIF(?, ''),
   CAST(? AS DECIMAL(14,2)),
   ROUND(COALESCE(g.revenue,
@@ -29,7 +31,8 @@ SELECT ?, ?, o.id, ?, ?, ?, ?, NULLIF(?, ''),
         CASE WHEN o.payout_percent IS NOT NULL THEN CAST(? AS DECIMAL(14,4)) * o.payout_percent / 100
              ELSE o.default_payout END), 2),
   ?, ?, ?, ?,
-  COALESCE(c.sub1, ''), COALESCE(c.sub2, ''), COALESCE(c.sub3, ''), COALESCE(c.sub4, ''), COALESCE(c.sub5, '')
+  COALESCE(c.sub1, ''), COALESCE(c.sub2, ''), COALESCE(c.sub3, ''), COALESCE(c.sub4, ''), COALESCE(c.sub5, ''),
+  COALESCE(c.traffic_source, ''), COALESCE(c.traffic_channel, '')
 FROM offers o
 LEFT JOIN offer_goals g ON g.offer_id = o.id AND g.code = ?
 LEFT JOIN publisher_offer_access a ON a.offer_id = o.id AND a.publisher_id = ?
@@ -119,7 +122,8 @@ export async function recordConversion(params: URLSearchParams, source: 's2s' | 
 async function scoreConversion(clickId: string, click: Click) {
   try {
     const [s] = await q<Record<string, string | Date | null>>(
-      `SELECT c.ts AS click_ts, c.is_bot AS bot, c.is_duplicate AS dup,
+      `SELECT c.ts AS click_ts, c.is_bot AS bot, c.is_duplicate AS dup, c.traffic_source AS src,
+              (SELECT blocked_sources FROM offers WHERE id = ?) AS blocked,
               -- Same visitor IP (from the clicks), not the request IP: for S2S
               -- postbacks the request comes from the advertiser's server.
               (SELECT COUNT(*) FROM conversions cv JOIN clicks ck ON ck.click_id = cv.click_id
@@ -129,7 +133,7 @@ async function scoreConversion(clickId: string, click: Click) {
               (SELECT COALESCE(SUM(clicks), 0) FROM stats_hourly WHERE publisher_id = ? AND hour >= UTC_DATE() - INTERVAL 7 DAY AND hour < UTC_DATE()) AS pc_7d,
               (SELECT COUNT(*) FROM conversions WHERE publisher_id = ? AND created_at >= UTC_DATE() - INTERVAL 7 DAY AND created_at < UTC_DATE()) AS pv_7d
        FROM (SELECT 1) one LEFT JOIN clicks c ON c.click_id = ?`,
-      [click.offerId, click.publisherId, click.publisherId, click.publisherId, click.publisherId, clickId],
+      [click.offerId, click.offerId, click.publisherId, click.publisherId, click.publisherId, click.publisherId, clickId],
     );
     const retentionMs = Math.max(7, Number(process.env.CLICK_RETENTION_DAYS ?? 90)) * 86_400_000;
     const pcToday = Number(s.pc_today), pvToday = Number(s.pv_today), pc7 = Number(s.pc_7d), pv7 = Number(s.pv_7d);
@@ -143,6 +147,7 @@ async function scoreConversion(clickId: string, click: Click) {
       pubConvToday: pvToday + 1, // including this one
       pubCrToday: pcToday ? (pvToday + 1) / pcToday : 0,
       pubCr7d: pc7 ? pv7 / pc7 : 0,
+      disallowedSource: s.src && String(s.blocked ?? '').split(',').includes(String(s.src)) ? sourceLabel(String(s.src)) : null,
     });
   } catch (e) {
     console.error('fraud score', e);

@@ -1,5 +1,6 @@
 import { ActionForm } from '../../../_components/ActionForm';
 import { CURRENCY } from '@/lib/format';
+import { RESTRICTABLE, sourceLabel } from '@/lib/sourceLabels';
 import { updateOffer } from '../../actions';
 
 export type EditableOffer = {
@@ -8,6 +9,7 @@ export type EditableOffer = {
   payout_percent: string | null; deeplink_enabled: number; deeplink_param: string; auto_approve_days: number | null;
   countries: string | null; devices: string | null; daily_cap: number | null; monthly_cap: number | null;
   daily_budget: string | null; fallback_offer_id: number | null; fallback_url: string | null;
+  blocked_sources: string | null;
 };
 
 const num = (v: string | number | null) => (v === null || v === undefined ? '' : String(Number(v)));
@@ -15,9 +17,10 @@ const num = (v: string | number | null) => (v === null || v === undefined ? '' :
 /** Collapsible edit form; saving records every change in the offer's history. */
 export function EditOffer({ o, otherOffers }: { o: EditableOffer; otherOffers: { id: number; name: string }[] }) {
   const devices = (o.devices ?? '').split(',');
+  const blocked = (o.blocked_sources ?? '').split(',');
   return (
     <details className="card edit-offer">
-      <summary><strong>Edit offer</strong> <span className="muted">price, payout, landing page, targeting, caps, deep links, auto-approve</span></summary>
+      <summary><strong>Edit offer</strong> <span className="muted">price, payout, landing page, targeting, caps, traffic sources, deep links, auto-approve</span></summary>
       <ActionForm action={updateOffer} submit="Save changes">
         <input type="hidden" name="id" value={o.id} />
         <div className="grid2">
@@ -64,6 +67,14 @@ export function EditOffer({ o, otherOffers }: { o: EditableOffer; otherOffers: {
           </label>
         </div>
         <label>Fallback URL (used when there&apos;s no fallback offer)<input name="fallback_url" type="url" defaultValue={o.fallback_url ?? ''} placeholder="https://" /></label>
+
+        <h3>Traffic sources</h3>
+        <fieldset className="checks">
+          <legend>Disallowed traffic sources (clicks still redirect; conversions are held for review)</legend>
+          {RESTRICTABLE.map((s) => (
+            <label key={s} className="check"><input type="checkbox" name="blocked_sources" value={s} defaultChecked={blocked.includes(s)} /> {sourceLabel(s)}</label>
+          ))}
+        </fieldset>
 
         <h3>Deep links</h3>
         <div className="grid2">
