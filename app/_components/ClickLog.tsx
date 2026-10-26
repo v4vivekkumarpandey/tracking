@@ -79,6 +79,7 @@ export async function ClickLog({ panel, scope, f, offers, publishers = [] }: {
           ) : (
             <>
               <dl className="facts">
+                <dt>Click ID</dt><dd><code>{f.q.toLowerCase()}</code></dd>
                 <dt>Created</dt><dd>{dateTime(lookup.time)} <span className="muted">(signature valid: this ID was issued by us)</span></dd>
                 <dt>Offer</dt><dd>{admin ? <Link href={`/admin/offers/${lookup.offerId}`}>{lookup.offer}</Link> : lookup.offer}</dd>
                 {panel !== 'publisher' && <><dt>Publisher</dt><dd>{panel === 'advertiser' ? `Publisher #${lookup.publisherId}` : lookup.publisher}</dd></>}
@@ -124,7 +125,7 @@ export async function ClickLog({ panel, scope, f, offers, publishers = [] }: {
             {rows.map((r) => (
               <tr key={r.click_id}>
                 <td>{dateTime(r.ts)}</td>
-                <td><code title={r.click_id}>{r.click_id.slice(0, 12)}…</code></td>
+                <td><Link href={`/${panel}/clicks?q=${r.click_id}`} title="Show full click ID and its conversions"><code>{r.click_id.slice(0, 12)}…</code></Link></td>
                 <td>{r.offer}</td>
                 {panel !== 'publisher' && <td>{pub(r)}</td>}
                 <td>
