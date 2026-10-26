@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { changePassword as change, type FormState } from '@/lib/account';
 import { requirePublisher } from '@/lib/auth';
 import { audit, exec, q } from '@/lib/db';
+import { addDomain, ownedDomain, refreshDomain, removeDomain } from '@/lib/domains';
 import { expand } from '@/lib/macros';
 import { deliver } from '@/lib/outbox';
 import { assertPublicUrl } from '@/lib/safeUrl';
@@ -104,4 +105,27 @@ export async function updateAccount(_: FormState, fd: FormData): Promise<FormSta
 export async function changePassword(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requirePublisher();
   return change(me.userId, fd);
+}
+
+// ---- Custom tracking domains (owner always taken from the session) ----
+
+export async function addDomainAction(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requirePublisher();
+  const res = await addDomain({ type: 'publisher', id: me.publisherId }, str(fd, 'hostname', 300));
+  revalidatePath('/publisher/domains');
+  return res;
+}
+
+export async function checkDomainAction(fd: FormData) {
+  const me = await requirePublisher();
+  const d = await ownedDomain(intId(fd, 'id'), { type: 'publisher', id: me.publisherId });
+  if (d) await refreshDomain(d);
+  revalidatePath('/publisher/domains');
+}
+
+export async function removeDomainAction(fd: FormData) {
+  const me = await requirePublisher();
+  const d = await ownedDomain(intId(fd, 'id'), { type: 'publisher', id: me.publisherId });
+  if (d) await removeDomain(d);
+  revalidatePath('/publisher/domains');
 }

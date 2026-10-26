@@ -1,16 +1,18 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 
-/** Builds the publisher's tracking link with optional sub IDs, with a copy button. */
-export function LinkBuilder({ base }: { base: string }) {
+/** Builds the publisher's tracking link: domain choice + optional sub IDs, with a copy button. */
+export function LinkBuilder({ path, domains }: { path: string; domains: { base: string; label: string }[] }) {
+  const [base, setBase] = useState(domains[0].base);
   const [subs, setSubs] = useState(['', '', '', '', '']);
   const [copied, setCopied] = useState(false);
   const qs = subs
     .map((v, i) => (v ? `sub${i + 1}=${encodeURIComponent(v)}` : ''))
     .filter(Boolean)
     .join('&');
-  const url = qs ? `${base}?${qs}` : base;
+  const url = `${base}${path}${qs ? `?${qs}` : ''}`;
 
   async function copy() {
     await navigator.clipboard.writeText(url);
@@ -25,6 +27,15 @@ export function LinkBuilder({ base }: { base: string }) {
         <code className="link-out">{url}</code>
         <button type="button" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button>
       </div>
+      <label>
+        Domain
+        <select name="domain" value={base} onChange={(e) => setBase(e.target.value)}>
+          {domains.map((d) => <option key={d.base} value={d.base}>{d.label}</option>)}
+        </select>
+      </label>
+      {domains.length === 1 && (
+        <p className="muted">Want links on your own domain? <Link href="/publisher/domains">Add a tracking domain</Link>.</p>
+      )}
       <p className="muted">
         Optional sub IDs travel with each click and come back in your reports and postbacks. Put your own click ID or
         traffic source in <code>sub1</code>, e.g. <code>sub1={'{your_click_id}'}</code>.

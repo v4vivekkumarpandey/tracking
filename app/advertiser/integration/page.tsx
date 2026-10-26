@@ -1,12 +1,15 @@
+import Link from 'next/link';
 import { requireAdvertiser } from '@/lib/auth';
 import { q } from '@/lib/db';
+import { domainsFor } from '@/lib/domains';
 import { dateTime, trackingBase } from '@/lib/format';
 import { regenerateSecret } from '../actions';
 import { ConfirmButton } from './ConfirmButton';
 
-export default async function Integration() {
+export default async function Integration(props: { searchParams: Promise<{ domain?: string }> }) {
   const me = await requireAdvertiser();
-  const [[adv], offers, logs] = await Promise.all([
+  const sp = await props.searchParams;
+  const [[adv], offers, logs, domains] = await Promise.all([
     q<{ secret: string }>(`SELECT postback_secret AS secret FROM advertisers WHERE id = ?`, [me.advertiserId]),
     q<{ id: number; name: string }>(`SELECT id, name FROM offers WHERE advertiser_id = ? AND status <> 'archived' ORDER BY name`, [me.advertiserId]),
     q<{ id: number; created_at: Date; source: string; status: string; message: string | null; params: string }>(
@@ -14,8 +17,12 @@ export default async function Integration() {
        JOIN offers o ON o.id = l.offer_id WHERE o.advertiser_id = ? ORDER BY l.id DESC LIMIT 30`,
       [me.advertiserId],
     ),
+    domainsFor({ type: 'advertiser', id: me.advertiserId }),
   ]);
-  const base = trackingBase();
+  // Their own active domain makes the pixel first-party; default to it.
+  const hosts = [...domains.filter((d) => d.status === 'active').map((d) => d.hostname), new URL(trackingBase()).host];
+  const host = hosts.find((h) => h === sp.domain) ?? hosts[0];
+  const base = host === new URL(trackingBase()).host ? trackingBase() : `https://${host}`;
   const s2s = `${base}/postback?click_id={CLICK_ID}&secret=${adv.secret}&txn_id={ORDER_ID}&amount={SALE_AMOUNT}`;
   const pixel = `<img src="${base}/px?click_id={CLICK_ID}&txn_id={ORDER_ID}&amount={SALE_AMOUNT}" width="1" height="1" alt="" style="display:none" />`;
 
@@ -23,6 +30,15 @@ export default async function Integration() {
     <>
       <div className="crumb">Manage</div>
       <h1>Integration</h1>
+
+      <div className="card row">
+        <span>Tracking domain:</span>
+        {hosts.length > 1
+          ? hosts.map((h) => (
+              <Link key={h} href={`/advertiser/integration?domain=${encodeURIComponent(h)}`} className={h === host ? 'badge active' : 'badge'}>{h}</Link>
+            ))
+          : <><code>{host}</code> <Link href="/advertiser/domains">Use your own domain (first-party) →</Link></>}
+      </div>
 
       <section className="card stack">
         <h2>1. Save our click ID</h2>

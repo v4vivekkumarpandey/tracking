@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { requirePublisher } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { money, trackingBase } from '@/lib/format';
+import { linkDomainOptions } from '@/lib/domains';
 import { payoutText } from '@/lib/offerView';
 import { requestAccess } from '../../actions';
 import { LinkBuilder } from './LinkBuilder';
@@ -29,7 +30,18 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
   const goals = await q<{ code: string; name: string; payout: string | null }>(
     `SELECT code, name, payout FROM offer_goals WHERE offer_id = ? ORDER BY code`, [oid],
   );
-  const link = o.access === 'approved' && o.code ? `${trackingBase()}/c/${o.code}` : null;
+  const approved = o.access === 'approved' && o.code;
+  // Link domains: the advertiser's own (first-party, preferred), then the
+  // publisher's own, then ours. Only active custom domains are offered.
+  const custom = approved ? await linkDomainOptions(me.publisherId, oid) : [];
+  const domainOptions = [
+    ...custom.map((d) => ({
+      base: `https://${d.hostname}`,
+      label: d.owner_type === 'advertiser' ? `${d.hostname} (advertiser domain, recommended)` : `${d.hostname} (your domain)`,
+    })),
+    { base: trackingBase(), label: `${new URL(trackingBase()).host} (network domain)` },
+  ];
+  const link = approved ? `/c/${o.code}` : null;
 
   return (
     <>
@@ -57,7 +69,7 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
       </div>
 
       {link ? (
-        <LinkBuilder base={link} />
+        <LinkBuilder path={link} domains={domainOptions} />
       ) : o.access === 'pending' ? (
         <div className="card notice">Your request is waiting for approval. You&apos;ll get your tracking link here once it&apos;s approved.</div>
       ) : o.access === 'rejected' ? (

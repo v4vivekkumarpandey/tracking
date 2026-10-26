@@ -4,6 +4,7 @@ export type Link = {
   id: number;
   offerId: number;
   publisherId: number;
+  advertiserId: number;
   destination: string;
   /** False if the link, offer or publisher is paused, or access was revoked. */
   active: boolean;
@@ -18,8 +19,8 @@ export async function getLink(code: string): Promise<Link | null> {
   const hit = cache.get(code);
   if (hit && hit.exp > Date.now()) return hit.link;
 
-  const rows = await q<{ id: number; offer_id: number; publisher_id: number; destination_url: string; active: number }>(
-    `SELECT l.id, l.offer_id, l.publisher_id, o.destination_url,
+  const rows = await q<{ id: number; offer_id: number; publisher_id: number; advertiser_id: number; destination_url: string; active: number }>(
+    `SELECT l.id, l.offer_id, l.publisher_id, o.advertiser_id, o.destination_url,
             (l.status = 'active' AND o.status = 'active' AND p.status = 'active'
              AND COALESCE(a.status, '') = 'approved') AS active
      FROM tracking_links l
@@ -31,7 +32,7 @@ export async function getLink(code: string): Promise<Link | null> {
   );
   const r = rows[0];
   const link: Link | null = r
-    ? { id: Number(r.id), offerId: Number(r.offer_id), publisherId: Number(r.publisher_id), destination: r.destination_url, active: Number(r.active) === 1 }
+    ? { id: Number(r.id), offerId: Number(r.offer_id), publisherId: Number(r.publisher_id), advertiserId: Number(r.advertiser_id), destination: r.destination_url, active: Number(r.active) === 1 }
     : null;
 
   if (cache.size > 10_000) cache.clear();

@@ -17,6 +17,7 @@ export default async function AdvertiserLayout({ children }: { children: React.R
         { title: 'Manage', links: [
           { href: '/advertiser/offers', icon: 'offers', label: 'Offers' },
           { href: '/advertiser/integration', icon: 'integration', label: 'Integration' },
+          { href: '/advertiser/domains', icon: 'domains', label: 'Domains' },
         ] },
         { title: 'Analyze', links: [
           { href: '/advertiser/reports', icon: 'reports', label: 'Reporting' },
