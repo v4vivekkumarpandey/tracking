@@ -14,7 +14,7 @@ export default async function NewOffer() {
         <p className="muted">We review new offers (usually within 1–2 business days), then publish them to our publishers.</p>
         <label>Offer name<input name="name" required maxLength={200} placeholder="Brand – Product – Country" /></label>
         <label>
-          Landing page URL. Must include <code>{'{click_id}'}</code>, which you store and send back when a conversion happens.
+          <span>Landing page URL. Must include <code>{'{click_id}'}</code>, which you store and send back when a conversion happens.</span>
           <input name="destination_url" type="url" required placeholder="https://yoursite.com/landing?click_id={click_id}" />
         </label>
         <div className="grid2">
