@@ -1,0 +1,25 @@
+# Hostinger's Git import needs package.json at the repository root, but the
+# lite app lives in apps/lite. This keeps a "hostinger-lite" branch that
+# contains only apps/lite at its root; point the Hostinger web app at it.
+name: Publish apps/lite to hostinger-lite branch
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/lite/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Split apps/lite into its own branch
+        run: |
+          git subtree split --prefix apps/lite -b hostinger-lite
+          git push --force origin hostinger-lite
