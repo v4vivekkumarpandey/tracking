@@ -34,7 +34,7 @@ export default async function Reports(props: { searchParams: Promise<{ from?: st
         <table>
           <thead>
             <tr>
-              <th>{GROUPS[group]}</th><th className="num">Clicks</th><th className="num">Unique</th><th className="num">Flagged</th>
+              <th>{GROUPS[group]}</th><th className="num">Clicks</th><th className="num">Unique</th><th className="num">Flagged</th><th className="num" title="Sent to a fallback by targeting or caps">Redirected</th>
               <th className="num">Conv.</th><th className="num">CR</th><th className="num">Approved</th><th className="num">Pending</th>
               <th className="num">Revenue</th><th className="num">Payout</th><th className="num">Margin</th><th className="num">EPC</th>
             </tr>
@@ -46,6 +46,7 @@ export default async function Reports(props: { searchParams: Promise<{ from?: st
                 <td className="num">{count(r.clicks)}</td>
                 <td className="num">{count(r.uniques)}</td>
                 <td className="num">{count(r.flagged)}</td>
+                <td className="num">{count(r.redirected)}</td>
                 <td className="num">{count(r.conversions)}</td>
                 <td className="num">{pct(r.conversions, r.clicks)}</td>
                 <td className="num">{count(r.approved)}</td>

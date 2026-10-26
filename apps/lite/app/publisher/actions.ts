@@ -1,5 +1,6 @@
 'use server';
 
+import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { changePassword as change, type FormState } from '@/lib/account';
 import { requirePublisher } from '@/lib/auth';
@@ -105,6 +106,26 @@ export async function updateAccount(_: FormState, fd: FormData): Promise<FormSta
 export async function changePassword(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requirePublisher();
   return change(me.userId, fd);
+}
+
+// ---- Smart links ----
+
+export async function createSmartLink(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requirePublisher();
+  const name = str(fd, 'name', 200) || 'Smart link';
+  const [{ n }] = await q<{ n: number }>(`SELECT COUNT(*) AS n FROM smart_links WHERE publisher_id = ? AND status = 'active'`, [me.publisherId]);
+  if (Number(n) >= 20) return { error: 'You can have up to 20 smart links.' };
+  const chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const code = Array.from(randomBytes(10), (b) => chars[b % chars.length]).join('');
+  await exec(`INSERT INTO smart_links (code, publisher_id, name) VALUES (?, ?, ?)`, [code, me.publisherId, name]);
+  revalidatePath('/publisher/smartlinks');
+  return { ok: 'Smart link created.' };
+}
+
+export async function deleteSmartLink(fd: FormData) {
+  const me = await requirePublisher();
+  await exec(`UPDATE smart_links SET status = 'deleted' WHERE id = ? AND publisher_id = ?`, [intId(fd, 'id'), me.publisherId]);
+  revalidatePath('/publisher/smartlinks');
 }
 
 // ---- Custom tracking domains (owner always taken from the session) ----

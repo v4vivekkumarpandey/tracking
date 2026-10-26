@@ -12,7 +12,7 @@
 // Route: */* on the ossaward.org zone. Requests for ossaward.org itself are
 // passed through untouched (see OWN_ZONE).
 
-const TRACKING_PATHS = /^\/(c\/[A-Za-z0-9]{1,32}\/?$|postback\/?$|px\/?$|healthz$)/;
+const TRACKING_PATHS = /^\/([cs]\/[A-Za-z0-9]{1,32}\/?$|postback\/?$|px\/?$|healthz$)/;
 
 export default {
   async fetch(request, env) {

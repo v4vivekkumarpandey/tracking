@@ -29,6 +29,8 @@ export function Shell({ panel, user, sections, children }: {
         <form action={logout} className="nav-foot">
           <p className="muted">{user}</p>
           <button className="secondary small" type="submit">Sign out</button>
+          {/* DB-IP Lite is CC BY 4.0: attribution required. */}
+          <p className="credit"><a href="https://db-ip.com" target="_blank" rel="noopener noreferrer">IP geolocation by DB-IP</a></p>
         </form>
       </nav>
       <main className="content">{children}</main>

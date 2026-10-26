@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ['mysql2'],
+  serverExternalPackages: ['mysql2', 'maxmind'],
   experimental: {
     // Creative uploads (banners up to 2 MB) go through server actions.
     serverActions: { bodySizeLimit: '3mb' },

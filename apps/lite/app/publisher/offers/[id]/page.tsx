@@ -7,6 +7,7 @@ import { creativesFor } from '@/lib/creatives';
 import { landingHost } from '@/lib/deeplink';
 import { linkDomainOptions } from '@/lib/domains';
 import { CreativesGallery } from '../../../_components/CreativesGallery';
+import { TargetingSummary } from '../../../_components/TargetingSummary';
 import { payoutText } from '@/lib/offerView';
 import { requestAccess } from '../../actions';
 import { LinkBuilder } from './LinkBuilder';
@@ -20,9 +21,10 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
     id: number; name: string; description: string | null; payout_model: string; attribution_days: number;
     default_payout: string; payout_percent: string | null; payout_override: string | null; access: string | null; code: string | null;
     deeplink_enabled: number; destination_url: string;
+    countries: string | null; devices: string | null; daily_cap: number | null; monthly_cap: number | null;
   }>(
     `SELECT o.id, o.name, o.description, o.payout_model, o.attribution_days, o.default_payout, o.payout_percent,
-            o.deeplink_enabled, o.destination_url,
+            o.deeplink_enabled, o.destination_url, o.countries, o.devices, o.daily_cap, o.monthly_cap,
             a.payout_override, a.status AS access, l.code
      FROM offers o
      LEFT JOIN publisher_offer_access a ON a.offer_id = o.id AND a.publisher_id = ?
@@ -60,6 +62,7 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
           <div><span className="muted">Model</span><strong>{o.payout_model}</strong></div>
           <div><span className="muted">Cookie window</span><strong>{o.attribution_days} days</strong></div>
         </div>
+        <TargetingSummary o={o} showBudget={false} />
         {o.description && <p className="wrap">{o.description}</p>}
         {goals.length > 0 && (
           <table>
