@@ -16,10 +16,10 @@ function fallback() {
 }
 
 // GET /c/{code}?sub1=..&sub5=  ->  302 to the offer with macros filled in.
-export async function GET(req: NextRequest, { params }: { params: { code: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   let link;
   try {
-    link = await getLink(params.code);
+    link = await getLink((await params).code);
   } catch (err) {
     console.error('link lookup', err);
     return fallback();

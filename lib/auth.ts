@@ -7,7 +7,7 @@ import { SESSION_COOKIE, verifySession } from './session';
  * only redirects visitors without a cookie; this is the real check.
  */
 export async function requireAdmin(): Promise<string> {
-  const email = await verifySession(cookies().get(SESSION_COOKIE)?.value);
+  const email = await verifySession((await cookies()).get(SESSION_COOKIE)?.value);
   if (!email) redirect('/login');
   return email;
 }
