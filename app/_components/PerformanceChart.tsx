@@ -14,9 +14,13 @@ type Props = {
   currency: string;
   currentLabel: string;
   lastLabel: string;
+  /** Metrics offered in the dropdown (summable ones only); first is the default. */
+  metrics?: Metric[];
+  /** Per-panel names, e.g. publishers see payout as "Earnings". */
+  labels?: Partial<Record<Metric, string>>;
 };
 
-const METRICS: Metric[] = ['revenue', 'payout', 'margin', 'conversions', 'clicks'];
+const DEFAULT_METRICS: Metric[] = ['revenue', 'payout', 'margin', 'conversions', 'clicks'];
 const W = 900;
 const H = 280;
 const PAD = { l: 60, r: 72, t: 16, b: 30 };
@@ -40,8 +44,9 @@ function niceTicks(min: number, max: number, count = 4): number[] {
   return ticks;
 }
 
-export function PerformanceChart({ current, last, today, currency, currentLabel, lastLabel }: Props) {
-  const [metric, setMetric] = useState<Metric>('revenue');
+export function PerformanceChart({ current, last, today, currency, currentLabel, lastLabel, metrics = DEFAULT_METRICS, labels = {} }: Props) {
+  const [metric, setMetric] = useState<Metric>(metrics[0]);
+  const label = (m: Metric) => labels[m] ?? METRIC_LABEL[m];
   const [hover, setHover] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -79,7 +84,7 @@ export function PerformanceChart({ current, last, today, currency, currentLabel,
         <label className="perf-metric">
           Metric
           <select value={metric} onChange={(e) => setMetric(e.target.value as Metric)}>
-            {METRICS.map((m) => <option key={m} value={m}>{METRIC_LABEL[m]}</option>)}
+            {metrics.map((m) => <option key={m} value={m}>{label(m)}</option>)}
           </select>
         </label>
         <span className="muted">Current month vs last month, cumulative</span>
@@ -92,7 +97,7 @@ export function PerformanceChart({ current, last, today, currency, currentLabel,
       <div className="perf-plot">
         <div className="perf-canvas">
         <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} role="img"
-          aria-label={`${METRIC_LABEL[metric]} month to date: ${fmt(curNow)}; same point last month ${fmt(prevSame)}`}>
+          aria-label={`${label(metric)} month to date: ${fmt(curNow)}; same point last month ${fmt(prevSame)}`}>
           {ticks.map((t) => (
             <g key={t}>
               <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} className={t === 0 ? 'axis' : 'grid'} />
@@ -135,7 +140,7 @@ export function PerformanceChart({ current, last, today, currency, currentLabel,
       </div>
 
       <footer className="perf-foot">
-        {METRIC_LABEL[metric]} month to date <strong>{fmt(curNow)}</strong> vs <strong>{fmt(prevSame)}</strong> at the same point last month
+        {label(metric)} month to date <strong>{fmt(curNow)}</strong> vs <strong>{fmt(prevSame)}</strong> at the same point last month
         <span className="muted"> · last month total {fmt(prevTotal)}</span>
       </footer>
 

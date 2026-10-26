@@ -209,4 +209,45 @@ export const migrations: { version: number; statements: string[] }[] = [
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     ],
   },
+  {
+    // Advertiser & publisher logins, self sign-up, marketplace visibility,
+    // manual publisher payments.
+    version: 2,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS users (
+        id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        email           VARCHAR(200) NOT NULL,
+        password_hash   VARCHAR(255) NOT NULL,
+        role            VARCHAR(16)  NOT NULL,
+        advertiser_id   BIGINT UNSIGNED NULL,
+        publisher_id    BIGINT UNSIGNED NULL,
+        session_version INT NOT NULL DEFAULT 1,
+        last_login_at   DATETIME(3) NULL,
+        created_at      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE KEY uq_user_email (email),
+        KEY ix_user_adv (advertiser_id),
+        KEY ix_user_pub (publisher_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+
+      `ALTER TABLE advertisers ADD COLUMN website VARCHAR(255) NULL`,
+      `ALTER TABLE publishers ADD COLUMN website VARCHAR(255) NULL, ADD COLUMN traffic_sources TEXT NULL`,
+      `ALTER TABLE offers ADD COLUMN visibility VARCHAR(16) NOT NULL DEFAULT 'public'`,
+      // Lets advertisers see the postbacks they sent, for debugging their integration.
+      `ALTER TABLE postback_log ADD COLUMN offer_id BIGINT UNSIGNED NULL, ADD KEY ix_pblog_offer (offer_id, id)`,
+
+      `CREATE TABLE IF NOT EXISTS payments (
+        id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        publisher_id BIGINT UNSIGNED NOT NULL,
+        amount       DECIMAL(14,2) NOT NULL,
+        method       VARCHAR(32)  NOT NULL,
+        reference    VARCHAR(200) NULL,
+        period_from  DATE NULL,
+        period_to    DATE NULL,
+        note         VARCHAR(500) NULL,
+        paid_at      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        KEY ix_pay_pub (publisher_id, paid_at),
+        CONSTRAINT fk_pay_pub FOREIGN KEY (publisher_id) REFERENCES publishers(id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    ],
+  },
 ];
