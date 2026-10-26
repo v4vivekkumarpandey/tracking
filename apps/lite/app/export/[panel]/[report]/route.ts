@@ -24,8 +24,8 @@ async function scopeFor(panel: Panel): Promise<Scope> {
 }
 
 const ALLOWED_GROUPS: Record<Panel, Group[]> = {
-  admin: ['day', 'offer', 'publisher', 'source', 'channel', 'landing'],
-  publisher: ['day', 'offer', 'sub1', 'source', 'channel', 'landing'],
+  admin: ['day', 'offer', 'publisher', 'source_id', 'source', 'channel', 'landing'],
+  publisher: ['day', 'offer', 'source_id', 'sub1', 'source', 'channel', 'landing'],
   advertiser: ['day', 'offer', 'source', 'channel', 'landing'],
 };
 
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pane
     const filter = scope.kind === 'publisher' ? ' AND c.publisher_id = ?' : scope.kind === 'advertiser' ? ' AND o.advertiser_id = ?' : '';
     const rows = await q<Record<string, unknown>>(
       `SELECT c.id, c.created_at, c.click_time, c.offer_id, o.name AS offer, c.publisher_id, p.name AS publisher,
-              c.goal, c.txn_id, c.amount, c.revenue, c.payout, c.status, c.source, c.sub1, c.sub2, c.sub3, c.reject_reason, c.traffic_source
+              c.goal, c.txn_id, c.amount, c.revenue, c.payout, c.status, c.source, c.source_id, c.sub1, c.sub2, c.sub3, c.sub4, c.sub5, c.sub6, c.sub7, c.sub8, c.sub9, c.sub10, c.reject_reason, c.traffic_source
        FROM conversions c JOIN offers o ON o.id = c.offer_id JOIN publishers p ON p.id = c.publisher_id
        WHERE c.created_at >= ? AND c.created_at < ? AND (? IS NULL OR c.status = ?)${filter}
        ORDER BY c.id DESC LIMIT ${MAX_ROWS}`,
@@ -79,10 +79,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pane
     if (p === 'admin') cols.push(
       { header: 'publisher', value: s('publisher') }, { header: 'txn_id', value: s('txn_id') },
       { header: 'sale_amount', value: (r) => money(r.amount) }, { header: 'revenue', value: (r) => money(r.revenue) },
-      { header: 'payout', value: (r) => money(r.payout) }, { header: 'source', value: s('source') }, { header: 'sub1', value: s('sub1') },
+      { header: 'payout', value: (r) => money(r.payout) }, { header: 'source', value: s('source') }, { header: 'source_id', value: s('source_id') }, { header: 'sub1', value: s('sub1') },
     );
     if (p === 'publisher') cols.push(
-      { header: 'sub1', value: s('sub1') }, { header: 'sub2', value: s('sub2') }, { header: 'sub3', value: s('sub3') },
+      { header: 'source_id', value: s('source_id') },
+      ...['sub1', 'sub2', 'sub3', 'sub4', 'sub5', 'sub6', 'sub7', 'sub8', 'sub9', 'sub10'].map((k) => ({ header: k, value: s(k) })),
       { header: 'payout', value: (r) => money(r.payout) },
     );
     if (p === 'advertiser') cols.push(

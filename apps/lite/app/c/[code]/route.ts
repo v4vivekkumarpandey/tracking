@@ -11,7 +11,7 @@ function fallback() {
   return url ? NextResponse.redirect(url, 302) : new NextResponse('Not found', { status: 404 });
 }
 
-// GET /c/{code}?sub1=..&sub5=[&url=deep link]  ->  302 to the offer (or its fallback).
+// GET /c/{code}?source_id=..&sub1=..&sub10=..[&lp=page id][&url=deep link]  ->  302 to the offer (or its fallback).
 export async function GET(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   let link;
   try {

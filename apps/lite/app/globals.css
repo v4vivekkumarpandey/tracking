@@ -57,6 +57,8 @@ code, .mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; f
   display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; height: 100vh; overflow-y: auto;
 }
 .nav .brand { display: flex; flex-direction: column; align-items: center; padding: 0 6px 18px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
+.sub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.sub-grid input { width: 100%; box-sizing: border-box; }
 .brand-logo { display: block; max-width: 100%; height: auto; margin-bottom: 6px; }
 .auth-brand .brand-logo { margin: 0 auto 6px; }
 /* The logo is blue on transparent: give it a light plate on dark backgrounds. */

@@ -12,6 +12,7 @@ import { BOT_UA, trunc, type TrackingContext } from './request';
 import { blockReason, pickLanding, type Block } from './routing';
 import { trackingBase } from './format';
 import { getSettingsCached } from './settings';
+import { SUB_FIELDS, subsFrom, type SubValues } from './subs';
 import { classify } from './trafficSource';
 
 // Shared by /c/{code} (tracking links) and /s/{code} (smart links):
@@ -61,7 +62,7 @@ export async function protectionBlock(v: Visitor): Promise<Block> {
  */
 export async function serveClick(req: NextRequest, link: Link, v: Visitor, opts: { smartLinkId?: number; checked?: boolean } = {}) {
   const sp = req.nextUrl.searchParams;
-  const subs = [1, 2, 3, 4, 5].map((i) => trunc(sp.get(`sub${i}`), 255));
+  const subs = subsFrom(sp);
 
   const shield = await protectionBlock(v).catch(() => null);
   if (shield) {
@@ -88,7 +89,7 @@ export async function serveClick(req: NextRequest, link: Link, v: Visitor, opts:
   return redirectTo(req, link, v, subs, opts.smartLinkId);
 }
 
-async function redirectTo(req: NextRequest, link: Link, v: Visitor, subs: string[], smartLinkId: number | undefined) {
+async function redirectTo(req: NextRequest, link: Link, v: Visitor, subs: SubValues, smartLinkId: number | undefined) {
   const sp = req.nextUrl.searchParams;
   const lp = pickLanding(link.landingPages, Number(sp.get('lp')) || null);
   const clickId = await record(link, v, subs, smartLinkId, null, sp, lp?.id ?? null);
@@ -113,12 +114,11 @@ function setClickCookie(res: NextResponse, link: Link, clickId: string) {
   });
 }
 
-function macroValues(link: Link, clickId: string, subs: string[]): Record<string, string> {
-  const vals: Record<string, string> = {
+function macroValues(link: Link, clickId: string, subs: SubValues): Record<string, string> {
+  return {
+    ...subs,
     click_id: clickId, offer_id: String(link.offerId), pub_id: String(link.publisherId), publisher_id: String(link.publisherId),
   };
-  subs.forEach((s, i) => (vals[`sub${i + 1}`] = s));
-  return vals;
 }
 
 function finish(url: string) {
@@ -131,7 +131,7 @@ function finish(url: string) {
 const hourOf = (d: Date) => new Date(Math.floor(d.getTime() / 3_600_000) * 3_600_000);
 
 /** Records the click (never throws: a database hiccup must not block the visitor). */
-async function record(link: Link, v: Visitor, subs: string[], smartLinkId: number | undefined, reason: Block,
+async function record(link: Link, v: Visitor, subs: SubValues, smartLinkId: number | undefined, reason: Block,
   params: URLSearchParams, lpId: number | null): Promise<string> {
   const now = new Date();
   const clickId = newClickId(link.offerId, link.publisherId, link.id, now);
@@ -147,11 +147,11 @@ async function record(link: Link, v: Visitor, subs: string[], smartLinkId: numbe
     const src = classify({ params, referer: v.referer, ua: v.ua, selfHost: new URL(trackingBase()).hostname });
     await exec(
       `INSERT INTO clicks (click_id, ts, offer_id, publisher_id, link_id, ip, ua, referer, country, device,
-                           sub1, sub2, sub3, sub4, sub5, is_bot, is_duplicate, smart_link_id, redirect_reason,
+                           ${SUB_FIELDS.join(', ')}, is_bot, is_duplicate, smart_link_id, redirect_reason,
                            traffic_source, traffic_channel, referer_host, source_evidence, asn, asn_org, ip_type, lp_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (${Array(33).fill('?').join(', ')})`,
       [clickId, now, link.offerId, link.publisherId, link.id, v.ip, trunc(v.ua, 512), v.referer, v.country.slice(0, 2), v.device,
-       ...subs, isBot, isDup, smartLinkId ?? null, reason,
+       ...SUB_FIELDS.map((k) => subs[k]), isBot, isDup, smartLinkId ?? null, reason,
        src.source, src.channel, src.refererHost.slice(0, 100), src.evidence.slice(0, 100),
        v.asn, v.asnOrg, ipType, lpId],
     );

@@ -94,7 +94,7 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
       <div className="card">
         <h2>Postbacks to publisher</h2>
         <p className="muted">
-          Macros: <code>{'{click_id} {sub1}…{sub5} {payout} {amount} {goal} {txn_id} {offer_id} {conversion_id} {status}'}</code>.
+          Macros: <code>{'{click_id} {source_id} {sub1}…{sub10} {payout} {amount} {goal} {txn_id} {offer_id} {conversion_id} {status}'}</code>.
           Publishers usually pass their own click ID in <code>sub1</code> and get it back via <code>{'{sub1}'}</code>.
         </p>
         <table>

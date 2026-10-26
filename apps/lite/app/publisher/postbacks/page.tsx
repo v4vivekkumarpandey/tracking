@@ -28,7 +28,7 @@ export default async function PublisherPostbacks() {
       <div className="card stack">
         <p>
           We call your URL on every conversion so your own tracker or ad platform records it.
-          Available macros: <code>{'{sub1} … {sub5} {payout} {goal} {conversion_id} {offer_id} {status} {click_id}'}</code>
+          Available macros: <code>{'{source_id} {sub1} … {sub10} {payout} {goal} {conversion_id} {offer_id} {status} {click_id}'}</code>
         </p>
         <p className="muted">Example: <code>{'https://your-tracker.com/postback?cid={sub1}&payout={payout}'}</code> — send your own click ID as sub1 on the tracking link.</p>
         <table>

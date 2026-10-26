@@ -32,7 +32,7 @@ export function EditOffer({ o, otherOffers }: { o: EditableOffer; otherOffers: {
             </select>
           </label>
         </div>
-        <label><span>Landing page URL (macros: <code>{'{click_id} {pub_id} {sub1}…{sub5}'}</code>)</span>
+        <label><span>Landing page URL (macros: <code>{'{click_id} {pub_id} {source_id} {sub1}…{sub10}'}</code>)</span>
           <input name="destination_url" type="url" defaultValue={o.destination_url} required />
         </label>
 

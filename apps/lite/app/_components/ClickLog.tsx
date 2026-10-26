@@ -40,7 +40,7 @@ export async function ClickLog({ panel, scope, f, offers, publishers = [] }: {
       <form className="card row">
         <label style={{ flex: 1, minWidth: 220 }}>
           Search
-          <input name="q" defaultValue={f.q} placeholder={admin ? 'click ID, sub ID, IP or AS number' : 'click ID or sub ID'} />
+          <input name="q" defaultValue={f.q} placeholder={admin ? 'click ID, source_id, sub ID, IP or AS number' : 'click ID, source_id or sub ID'} />
         </label>
         <label>Period
           <select name="days" defaultValue={String(f.days)}>
@@ -117,7 +117,7 @@ export async function ClickLog({ panel, scope, f, offers, publishers = [] }: {
           <thead>
             <tr>
               <th>Time (UTC)</th><th>Click ID</th><th>Offer</th>{panel !== 'publisher' && <th>Publisher</th>}
-              <th>Visitor</th><th>Source</th><th>sub1</th><th>Landing</th><th>Flags</th><th className="num">Conv.</th>
+              <th>Visitor</th><th>Source</th><th>source_id / sub1</th><th>Landing</th><th>Flags</th><th className="num">Conv.</th>
               {admin && <th></th>}
             </tr>
           </thead>
@@ -133,7 +133,7 @@ export async function ClickLog({ panel, scope, f, offers, publishers = [] }: {
                   {admin && <div className="muted mono" title={r.ua}>{r.ip}{r.asn_org && ` · ${r.asn_org}`}{r.asn ? ` (AS${r.asn})` : ''}</div>}
                 </td>
                 <td>{sourceLabel(r.traffic_source)}{r.referer_host && <div className="muted">{r.referer_host}</div>}</td>
-                <td className="mono">{r.sub1}</td>
+                <td className="mono">{r.source_id && <div>{r.source_id}</div>}{r.sub1}</td>
                 <td>{r.lp_name ?? <span className="muted">default</span>}</td>
                 <td className={flags(r).length ? 'error' : ''}>{flags(r).join(', ') || <span className="muted">–</span>}</td>
                 <td className="num">{Number(r.conv) ? <strong>{r.conv}</strong> : '–'}</td>

@@ -40,7 +40,7 @@ export default async function NewOffer() {
             <label>Attribution window (days)<input name="attribution_days" type="number" min={1} max={365} defaultValue={30} /></label>
           </div>
           <label>
-            <span>Destination URL. Macros: <code>{'{click_id} {pub_id} {offer_id} {sub1}…{sub5}'}</code>. Must include <code>{'{click_id}'}</code> so the advertiser can report conversions.</span>
+            <span>Destination URL. Macros: <code>{'{click_id} {pub_id} {offer_id} {source_id} {sub1}…{sub10}'}</code>. Must include <code>{'{click_id}'}</code> so the advertiser can report conversions.</span>
             <input name="destination_url" type="url" required placeholder="https://brand.example/?utm_source=network&click_id={click_id}" />
           </label>
 
