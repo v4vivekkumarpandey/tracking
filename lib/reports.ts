@@ -8,12 +8,12 @@ import { channelLabel, sourceLabel } from './sourceLabels';
 // Clicks come from stats_hourly (or raw clicks for sub1); conversions and
 // money from non-rejected conversions. Days are UTC.
 
-export type Group = 'day' | 'offer' | 'publisher' | 'sub1' | 'source' | 'channel' | 'landing';
+export type Group = 'day' | 'offer' | 'publisher' | 'sub1' | 'source_id' | 'source' | 'channel' | 'landing';
 
 /** Groups that need raw clicks (kept for CLICK_RETENTION_DAYS, 90 by default). */
-export const RAW_GROUPS: Group[] = ['sub1', 'source', 'channel', 'landing'];
+export const RAW_GROUPS: Group[] = ['sub1', 'source_id', 'source', 'channel', 'landing'];
 const RAW_COL: Partial<Record<Group, string>> = {
-  sub1: 't.sub1', source: 't.traffic_source', channel: 't.traffic_channel', landing: 'CAST(t.lp_id AS CHAR)',
+  sub1: 't.sub1', source_id: 't.source_id', source: 't.traffic_source', channel: 't.traffic_channel', landing: 'CAST(t.lp_id AS CHAR)',
 };
 export type ReportRow = {
   key: string; label: string; clicks: number; uniques: number; flagged: number; redirected: number;
@@ -44,8 +44,8 @@ function where(scope: Scope, alias: string): { join: string; sql: string; params
 
 export async function runReport(scope: Scope, group: Group, from: string, toExcl: string) {
   const s = where(scope, 't');
-  const clickKey = { day: `DATE_FORMAT(t.hour, '%Y-%m-%d')`, offer: 'CAST(t.offer_id AS CHAR)', publisher: 'CAST(t.publisher_id AS CHAR)', sub1: '', source: '', channel: '', landing: '' }[group];
-  const convKey = { day: `DATE_FORMAT(t.created_at, '%Y-%m-%d')`, offer: 'CAST(t.offer_id AS CHAR)', publisher: 'CAST(t.publisher_id AS CHAR)', sub1: 't.sub1', source: 't.traffic_source', channel: 't.traffic_channel', landing: 'CAST(t.lp_id AS CHAR)' }[group];
+  const clickKey = { day: `DATE_FORMAT(t.hour, '%Y-%m-%d')`, offer: 'CAST(t.offer_id AS CHAR)', publisher: 'CAST(t.publisher_id AS CHAR)', sub1: '', source_id: '', source: '', channel: '', landing: '' }[group];
+  const convKey = { day: `DATE_FORMAT(t.created_at, '%Y-%m-%d')`, offer: 'CAST(t.offer_id AS CHAR)', publisher: 'CAST(t.publisher_id AS CHAR)', sub1: 't.sub1', source_id: 't.source_id', source: 't.traffic_source', channel: 't.traffic_channel', landing: 'CAST(t.lp_id AS CHAR)' }[group];
 
   // Clicks sent to a fallback URL (targeting/caps) count as "redirected", not as clicks.
   const clicksSql = RAW_GROUPS.includes(group)

@@ -9,6 +9,7 @@ import { addDomain, ownedDomain, refreshDomain, removeDomain } from '@/lib/domai
 import { expand } from '@/lib/macros';
 import { deliver } from '@/lib/outbox';
 import { assertPublicUrl } from '@/lib/safeUrl';
+import { SUB_FIELDS } from '@/lib/subs';
 
 // Every action takes the publisher from the session (requirePublisher) and
 // re-checks ownership in SQL. IDs from the form are never trusted alone.
@@ -76,7 +77,7 @@ export async function testPostback(_: TestState, fd: FormData): Promise<TestStat
   const url = expand(pb.url, {
     click_id: 'test-click-id', conversion_id: '0', offer_id: '0', pub_id: String(me.publisherId), goal: 'test',
     txn_id: 'TEST', amount: '100.00', payout: '1.00', status: 'test',
-    sub1: 'test-sub1', sub2: 'test-sub2', sub3: 'test-sub3', sub4: 'test-sub4', sub5: 'test-sub5',
+    ...Object.fromEntries(SUB_FIELDS.map((k) => [k, `test-${k.replace('_', '-')}`])),
   });
   const res = await deliver(url);
   return { url, status: res.status, body: res.body.slice(0, 300), error: res.error };

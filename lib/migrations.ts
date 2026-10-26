@@ -434,4 +434,20 @@ export const migrations: { version: number; statements: string[] }[] = [
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     ],
   },
+  {
+    // Everflow-style publisher parameters: source_id and sub6–sub10.
+    version: 9,
+    statements: [
+      `ALTER TABLE clicks
+         ADD COLUMN source_id VARCHAR(255) NOT NULL DEFAULT '',
+         ADD COLUMN sub6 VARCHAR(255) NOT NULL DEFAULT '', ADD COLUMN sub7 VARCHAR(255) NOT NULL DEFAULT '',
+         ADD COLUMN sub8 VARCHAR(255) NOT NULL DEFAULT '', ADD COLUMN sub9 VARCHAR(255) NOT NULL DEFAULT '',
+         ADD COLUMN sub10 VARCHAR(255) NOT NULL DEFAULT ''`,
+      `ALTER TABLE conversions
+         ADD COLUMN source_id VARCHAR(255) NOT NULL DEFAULT '',
+         ADD COLUMN sub6 VARCHAR(255) NOT NULL DEFAULT '', ADD COLUMN sub7 VARCHAR(255) NOT NULL DEFAULT '',
+         ADD COLUMN sub8 VARCHAR(255) NOT NULL DEFAULT '', ADD COLUMN sub9 VARCHAR(255) NOT NULL DEFAULT '',
+         ADD COLUMN sub10 VARCHAR(255) NOT NULL DEFAULT ''`,
+    ],
+  },
 ];

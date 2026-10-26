@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { SUB_FIELDS, type SubField } from '@/lib/subs';
 
 /** Builds the publisher's tracking link: domain, landing page, optional deep link and sub IDs, with a copy button. */
 export function LinkBuilder({ path, domains, deeplinkHost, landings }: {
@@ -11,10 +12,10 @@ export function LinkBuilder({ path, domains, deeplinkHost, landings }: {
 }) {
   const [base, setBase] = useState(domains[0].base);
   const [lp, setLp] = useState(0);
-  const [subs, setSubs] = useState(['', '', '', '', '']);
+  const [subs, setSubs] = useState<Partial<Record<SubField, string>>>({});
   const [deep, setDeep] = useState('');
   const [copied, setCopied] = useState(false);
-  const params = subs.map((v, i) => (v ? `sub${i + 1}=${encodeURIComponent(v)}` : '')).filter(Boolean);
+  const params = SUB_FIELDS.filter((k) => subs[k]?.trim()).map((k) => `${k}=${encodeURIComponent(subs[k]!.trim())}`);
   if (lp) params.push(`lp=${lp}`);
   if (deeplinkHost && deep.trim()) params.push(`url=${encodeURIComponent(deep.trim())}`);
   const page = landings.find((l) => l.id === lp);
@@ -58,15 +59,16 @@ export function LinkBuilder({ path, domains, deeplinkHost, landings }: {
         </label>
       )}
       <p className="muted">
-        Optional sub IDs travel with each click and come back in your reports and postbacks. Put your own click ID or
-        traffic source in <code>sub1</code>, e.g. <code>sub1={'{your_click_id}'}</code>.
+        Optional: <code>source_id</code> (e.g. your site or traffic source) and <code>sub1</code>–<code>sub10</code> travel with each
+        click and come back in your reports, click log and postbacks (as <code>{'{source_id}'}</code>, <code>{'{sub1}'}</code>…). Put your
+        own click ID in <code>sub1</code>, e.g. <code>sub1={'{your_click_id}'}</code>; leave the rest empty if you don&apos;t need them.
       </p>
-      <div className="row">
-        {subs.map((v, i) => (
-          <label key={i}>
-            sub{i + 1}
-            <input value={v} maxLength={255} style={{ width: 130 }}
-              onChange={(e) => setSubs((s) => s.map((x, j) => (j === i ? e.target.value : x)))} />
+      <div className="sub-grid">
+        {SUB_FIELDS.map((k) => (
+          <label key={k}>
+            {k}
+            <input name={k} value={subs[k] ?? ''} maxLength={255}
+              onChange={(e) => setSubs((s) => ({ ...s, [k]: e.target.value }))} />
           </label>
         ))}
       </div>

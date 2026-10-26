@@ -42,7 +42,7 @@ export function LandingPagesManager({ offerId, defaultUrl, pages, as }: {
         <ActionForm action={add} submit="Add landing page" reset>
           <input type="hidden" name="offer_id" value={offerId} />
           <label>Name<input name="name" required maxLength={200} placeholder="Quiz funnel" /></label>
-          <label><span>URL (macros: <code>{'{click_id} {pub_id} {sub1}…{sub5}'}</code>)</span>
+          <label><span>URL (macros: <code>{'{click_id} {pub_id} {source_id} {sub1}…{sub10}'}</code>)</span>
             <input name="url" type="url" required placeholder="https://brand.com/quiz?click_id={click_id}" />
           </label>
           <label>Split % of visitors who didn&apos;t choose a page (0 = only when chosen)<input name="weight" type="number" min={0} max={100} defaultValue={0} /></label>

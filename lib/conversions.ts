@@ -5,6 +5,7 @@ import { sourceLabel } from './sourceLabels';
 import { exec, isDuplicate, q, tx } from './db';
 import { expand } from './macros';
 import { processOutbox } from './outbox';
+import { SUB_FIELDS, subColumns } from './subs';
 
 const AMOUNT = /^\d{1,12}(\.\d{1,4})?$/;
 const TOKEN = /^[A-Za-z0-9_.:\-]{0,128}$/;
@@ -20,7 +21,7 @@ const same = (a: string, b: string) =>
 const INSERT_SQL = `
 INSERT INTO conversions
   (click_id, click_time, offer_id, publisher_id, link_id, goal, txn_id, txn_key,
-   amount, revenue, payout, source, ip, fraud_score, fraud_reasons, sub1, sub2, sub3, sub4, sub5,
+   amount, revenue, payout, source, ip, fraud_score, fraud_reasons, ${subColumns()},
    traffic_source, traffic_channel, lp_id)
 SELECT ?, ?, o.id, ?, ?, ?, ?, NULLIF(?, ''),
   CAST(? AS DECIMAL(14,2)),
@@ -31,7 +32,7 @@ SELECT ?, ?, o.id, ?, ?, ?, ?, NULLIF(?, ''),
         CASE WHEN o.payout_percent IS NOT NULL THEN CAST(? AS DECIMAL(14,4)) * o.payout_percent / 100
              ELSE o.default_payout END), 2),
   ?, ?, ?, ?,
-  COALESCE(c.sub1, ''), COALESCE(c.sub2, ''), COALESCE(c.sub3, ''), COALESCE(c.sub4, ''), COALESCE(c.sub5, ''),
+  ${SUB_FIELDS.map((k) => `COALESCE(c.${k}, '')`).join(', ')},
   COALESCE(c.traffic_source, ''), COALESCE(c.traffic_channel, ''), c.lp_id
 FROM offers o
 LEFT JOIN offer_goals g ON g.offer_id = o.id AND g.code = ?
@@ -84,7 +85,7 @@ export async function recordConversion(params: URLSearchParams, source: 's2s' | 
       if (ins.affectedRows === 0) return 0;
       const convId = ins.insertId;
       const [c] = await t.q<Record<string, string>>(
-        `SELECT payout, amount, sub1, sub2, sub3, sub4, sub5 FROM conversions WHERE id = ?`,
+        `SELECT payout, amount, ${subColumns()} FROM conversions WHERE id = ?`,
         [convId],
       );
       // Queue one postback per matching publisher URL, in the same
@@ -98,7 +99,7 @@ export async function recordConversion(params: URLSearchParams, source: 's2s' | 
       const vals: Record<string, string> = {
         click_id: clickId, conversion_id: String(convId), offer_id: String(click.offerId),
         pub_id: String(click.publisherId), goal, txn_id: txnId, amount: c.amount, payout: c.payout,
-        status: 'pending', sub1: c.sub1, sub2: c.sub2, sub3: c.sub3, sub4: c.sub4, sub5: c.sub5,
+        status: 'pending', ...Object.fromEntries(SUB_FIELDS.map((k) => [k, c[k]])),
       };
       for (const u of urls) {
         await t.exec(`INSERT INTO outbox (kind, ref_id, payload) VALUES ('http_get', ?, ?)`, [

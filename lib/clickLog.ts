@@ -2,6 +2,7 @@ import { parseClickId } from './clickid';
 import type { Scope } from './dashboard';
 import { q } from './db';
 import { parseIp } from './ipRules';
+import { SUB_FIELDS } from './subs';
 
 // Raw click search and click-ID lookup for the Click log pages. Scoped like
 // every other query: publishers see their own clicks, advertisers clicks on
@@ -27,7 +28,7 @@ export function parseFilters(sp: Record<string, string | undefined>): ClickFilte
 export type ClickRow = {
   click_id: string; ts: Date; offer_id: number; offer: string; publisher_id: number; publisher: string;
   ip: string; asn: number | null; asn_org: string; ip_type: string; country: string; device: string; ua: string;
-  traffic_source: string; referer_host: string; sub1: string; sub2: string;
+  traffic_source: string; referer_host: string; source_id: string; sub1: string; sub2: string;
   is_bot: number; is_duplicate: number; redirect_reason: string | null; lp_name: string | null; conv: number;
 };
 
@@ -47,7 +48,7 @@ export async function searchClicks(scope: Scope, f: ClickFilters, admin: boolean
     add('c.ts >= UTC_TIMESTAMP() - INTERVAL ? DAY', f.days);
     if (term && admin && parseIp(term)) add('c.ip = ?', term);
     else if (term && admin && /^AS\d{1,10}$/i.test(term)) add('c.asn = ?', Number(term.slice(2)));
-    else if (term) add('(c.sub1 = ? OR c.sub2 = ? OR c.sub3 = ? OR c.sub4 = ? OR c.sub5 = ?)', term, term, term, term, term);
+    else if (term) add(`(${SUB_FIELDS.map((k) => `c.${k} = ?`).join(' OR ')})`, ...SUB_FIELDS.map(() => term));
   }
   if (f.flag === 'flagged') add(`(c.is_bot = 1 OR c.is_duplicate = 1 OR c.ip_type <> '')`);
   if (f.flag === 'blocked') add(`c.redirect_reason IN ('ip', 'dc')`);
@@ -56,7 +57,7 @@ export async function searchClicks(scope: Scope, f: ClickFilters, admin: boolean
 
   return q<ClickRow>(
     `SELECT c.click_id, c.ts, c.offer_id, o.name AS offer, c.publisher_id, p.name AS publisher,
-            c.ip, c.asn, c.asn_org, c.ip_type, c.country, c.device, c.ua, c.traffic_source, c.referer_host, c.sub1, c.sub2,
+            c.ip, c.asn, c.asn_org, c.ip_type, c.country, c.device, c.ua, c.traffic_source, c.referer_host, c.source_id, c.sub1, c.sub2,
             c.is_bot, c.is_duplicate, c.redirect_reason, lp.name AS lp_name,
             (SELECT COUNT(*) FROM conversions cv WHERE cv.click_id = c.click_id) AS conv
      FROM clicks c
