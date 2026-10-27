@@ -4,16 +4,22 @@ import { requireAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { balances, paymentHistory } from '@/lib/balance';
 import { dateTime, money, trackingBase } from '@/lib/format';
-import { addPostback, deletePostback, setPublisherStatus } from '../../actions';
+import { addPaymentMethodAdmin, addPostback, deletePostback, removePaymentMethodAdmin, setDefaultPaymentMethodAdmin, setPublisherStatus, updatePublisherProfile } from '../../actions';
 import { RecordPayment } from '../../RecordPayment';
 import { SourceBreakdown } from '../../../_components/SourceBreakdown';
 import { ResetLogin } from '../../ResetLogin';
+import { SetPassword } from '../../SetPassword';
+import { ActionForm } from '../../../_components/ActionForm';
+import { PaymentMethods } from '../../../_components/PaymentMethods';
+import { ProfileFields } from '../../../_components/ProfileFields';
+import { methodLabel, methodsOf } from '@/lib/paymentMethods';
 
 type Pub = {
   id: number; name: string; company: string | null; email: string | null; country: string | null; website: string | null;
   traffic_sources: string | null; tax_id: string | null; payout_method: string | null; payout_details: string | null;
   status: string; kyc_status: string; created_at: Date; login: string | null; last_login_at: Date | null;
   referred_by: number | null; referrer: string | null;
+  phone: string | null; messenger: string | null; address: string | null; payment_changed_at: Date | null;
 };
 
 export default async function PublisherPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,7 +32,7 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
   );
   if (!p) notFound();
 
-  const [postbacks, links, offers, deliveries, [bal], history] = await Promise.all([
+  const [postbacks, links, offers, deliveries, [bal], history, methods] = await Promise.all([
     q<{ id: number; url: string; offer_name: string | null; goal: string | null }>(
       `SELECT pb.id, pb.url, o.name AS offer_name, pb.goal FROM publisher_postbacks pb
        LEFT JOIN offers o ON o.id = pb.offer_id
@@ -46,6 +52,7 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
     ),
     balances(pid),
     paymentHistory(pid),
+    methodsOf(pid),
   ]);
 
   return (
@@ -62,16 +69,31 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
             </form>
           ))}
           <ResetLogin role="publisher" id={p.id} hasLogin={!!p.login} />
+          <SetPassword role="publisher" id={p.id} />
         </div>
         <dl className="facts">
           <dt>Login</dt><dd>{p.login ?? <span className="muted">none</span>}{p.last_login_at && <span className="muted"> · last sign-in {dateTime(p.last_login_at)}</span>}</dd>
-          <dt>Contact</dt><dd>{[p.company, p.email, p.country].filter(Boolean).join(' · ') || '–'}</dd>
+          <dt>Contact</dt><dd>{[p.company, p.email, p.phone, p.messenger, p.country].filter(Boolean).join(' · ') || '–'}</dd>
+          {p.address && <><dt>Address</dt><dd className="wrap">{p.address}</dd></>}
           <dt>Website</dt><dd>{p.website ? <a href={p.website} target="_blank" rel="noreferrer noopener">{p.website}</a> : '–'}</dd>
           <dt>Traffic (declared)</dt><dd className="wrap">{p.traffic_sources || '–'}</dd>
-          <dt>Payment</dt><dd>{p.payout_method ? <><strong>{p.payout_method}</strong> <span className="mono">{p.payout_details}</span></> : <span className="muted">not provided</span>}{p.tax_id && <span className="muted"> · tax ID {p.tax_id}</span>}</dd>
+          <dt>Payment</dt><dd>{p.payout_method ? <><strong>{methodLabel(p.payout_method)}</strong> <span className="mono">{p.payout_details}</span></> : <span className="muted">not provided</span>}{p.tax_id && <span className="muted"> · tax ID {p.tax_id}</span>}
+            {p.payment_changed_at && Date.now() - new Date(p.payment_changed_at).getTime() < 7 * 86_400_000 && <div className="error">Payment details changed {dateTime(p.payment_changed_at)}: confirm with the publisher before paying.</div>}</dd>
           <dt>Joined</dt><dd>{dateTime(p.created_at)}{p.referred_by && <> · referred by <Link href={`/admin/publishers/${p.referred_by}`}>{p.referrer}</Link></>}</dd>
         </dl>
       </div>
+
+      <details className="card edit-offer">
+        <summary><strong>Edit profile</strong> <span className="muted">contact details, sign-in email</span></summary>
+        <ActionForm action={updatePublisherProfile} submit="Save profile">
+          <input type="hidden" name="id" value={p.id} />
+          <ProfileFields p={p} />
+          {p.login && <label>Sign-in email<input name="login_email" type="email" defaultValue={p.login} maxLength={200} /></label>}
+        </ActionForm>
+      </details>
+
+      <PaymentMethods methods={methods} add={addPaymentMethodAdmin} setDefault={setDefaultPaymentMethodAdmin}
+        remove={removePaymentMethodAdmin} publisherId={p.id} admin />
 
       <SourceBreakdown filter={{ publisherId: p.id }} title="Detected traffic sources (last 30 days)" />
 

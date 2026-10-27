@@ -10,6 +10,9 @@ import { expand } from '@/lib/macros';
 import { deliver } from '@/lib/outbox';
 import { assertPublicUrl } from '@/lib/safeUrl';
 import { SUB_FIELDS } from '@/lib/subs';
+import { verifyPassword } from '@/lib/password';
+import { addMethod, methodLabel, removeMethod, setDefault } from '@/lib/paymentMethods';
+import { profileFrom } from '@/lib/profile';
 
 // Every action takes the publisher from the session (requirePublisher) and
 // re-checks ownership in SQL. IDs from the form are never trusted alone.
@@ -83,25 +86,53 @@ export async function testPostback(_: TestState, fd: FormData): Promise<TestStat
   return { url, status: res.status, body: res.body.slice(0, 300), error: res.error };
 }
 
-const PAYOUT_METHODS = ['paypal', 'wise', 'bank', 'crypto', 'other'];
-
 export async function updateAccount(_: FormState, fd: FormData): Promise<FormState> {
   const me = await requirePublisher();
-  const website = str(fd, 'website', 255);
-  if (website && !/^https?:\/\/\S+\.\S+/.test(website)) return { error: 'Website must start with http:// or https://' };
-  const country = str(fd, 'country', 2).toUpperCase();
-  const method = str(fd, 'payout_method', 32);
-  if (method && !PAYOUT_METHODS.includes(method)) return { error: 'Choose a payment method.' };
-  const name = str(fd, 'name', 200);
-  if (!name) return { error: 'Name is required.' };
+  const p = profileFrom(fd);
+  if ('error' in p) return { error: p.error };
   await exec(
-    `UPDATE publishers SET name = ?, company = ?, website = ?, country = ?, tax_id = ?, payout_method = ?, payout_details = ? WHERE id = ?`,
-    [name, str(fd, 'company', 200) || null, website || null, /^[A-Z]{2}$/.test(country) ? country : null,
-     str(fd, 'tax_id', 64) || null, method || null, str(fd, 'payout_details', 1000) || null, me.publisherId],
+    `UPDATE publishers SET name = ?, company = ?, email = ?, website = ?, country = ?, tax_id = ?, phone = ?, messenger = ?,
+                           address = ?, traffic_sources = ? WHERE id = ?`,
+    [p.name, p.company, p.email, p.website, p.country, p.tax_id, p.phone, p.messenger, p.address, p.traffic_sources, me.publisherId],
   );
   await audit(`publisher:${me.publisherId}`, 'update_account', 'publisher', me.publisherId);
   revalidatePath('/publisher', 'layout');
   return { ok: 'Saved.' };
+}
+
+// ---- Payment methods: adding or switching one needs the account password,
+// so a stolen session can't redirect payouts. ----
+
+async function confirmPassword(userId: number, fd: FormData): Promise<boolean> {
+  const [u] = await q<{ password_hash: string }>(`SELECT password_hash FROM users WHERE id = ?`, [userId]);
+  return !!u && verifyPassword(String(fd.get('current') ?? ''), u.password_hash);
+}
+
+export async function addPaymentMethod(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requirePublisher();
+  if (!(await confirmPassword(me.userId, fd))) return { error: 'Your password is wrong.' };
+  const type = str(fd, 'type', 16);
+  const err = await addMethod(me.publisherId, type, fd, fd.get('make_default') === 'on');
+  if (err) return { error: err };
+  await audit(`publisher:${me.publisherId}`, 'add_payment_method', 'publisher', me.publisherId, { type });
+  revalidatePath('/publisher', 'layout');
+  return { ok: `${methodLabel(type)} saved.` };
+}
+
+export async function setDefaultPaymentMethod(_: FormState, fd: FormData): Promise<FormState> {
+  const me = await requirePublisher();
+  if (!(await confirmPassword(me.userId, fd))) return { error: 'Your password is wrong.' };
+  if (!(await setDefault(me.publisherId, intId(fd, 'method_id')))) return { error: 'Payment method not found.' };
+  await audit(`publisher:${me.publisherId}`, 'default_payment_method', 'publisher', me.publisherId, { id: str(fd, 'method_id') });
+  revalidatePath('/publisher', 'layout');
+  return { ok: 'Default payment method changed.' };
+}
+
+export async function removePaymentMethod(fd: FormData) {
+  const me = await requirePublisher();
+  await removeMethod(me.publisherId, intId(fd, 'id'));
+  await audit(`publisher:${me.publisherId}`, 'remove_payment_method', 'publisher', me.publisherId, { id: str(fd, 'id') });
+  revalidatePath('/publisher', 'layout');
 }
 
 export async function changePassword(_: FormState, fd: FormData): Promise<FormState> {

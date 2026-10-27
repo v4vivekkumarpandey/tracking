@@ -1,6 +1,6 @@
 import { recordPayment } from './actions';
 
-const METHODS = ['paypal', 'wise', 'bank', 'crypto', 'other'] as const;
+const METHODS = ['paypal', 'bank', 'upi', 'payoneer', 'wise', 'crypto', 'other'] as const;
 
 /** Inline form to record a payment already sent to a publisher. */
 export function RecordPayment({ publisherId, amount, method }: { publisherId: number; amount: number; method: string | null }) {

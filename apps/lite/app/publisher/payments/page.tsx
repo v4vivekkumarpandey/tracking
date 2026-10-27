@@ -17,7 +17,7 @@ export default async function PublisherPayments() {
       <div className="crumb">Account</div>
       <div className="title-row"><h1>Payments</h1><a href="/export/publisher/payments" className="button secondary-button">Download CSV</a></div>
       {!acct?.payout_method && (
-        <div className="banner">Add your payment details in <Link href="/publisher/account">Settings</Link> so we can pay you.</div>
+        <div className="banner">Add a payment method in <Link href="/publisher/account">Settings</Link> so we can pay you.</div>
       )}
       <div className="kpis">
         <Tile label="Balance (ready to pay)" value={money(bal?.balance ?? 0)} />
