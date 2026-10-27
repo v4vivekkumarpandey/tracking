@@ -288,6 +288,18 @@ label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--t
 .perf-table summary { cursor: pointer; color: var(--accent); }
 .perf-table .table-wrap { max-height: 280px; overflow-y: auto; }
 
+/* Advertiser forms */
+.grid2.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.req { color: var(--bad); }
+.hint { font-style: italic; }
+.input-addons { display: flex; gap: 6px; align-items: stretch; }
+.input-addons input { flex: 1; min-width: 0; }
+.notes { white-space: pre-wrap; }
+
+@media (max-width: 640px) {
+  .grid2.two { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 760px) {
   .shell { grid-template-columns: 1fr; }
   .nav { position: static; height: auto; flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px; }

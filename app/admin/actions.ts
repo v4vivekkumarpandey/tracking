@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { audit, exec, q } from '@/lib/db';
+import { audit, exec, q, tx } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
 import { clearCapsCache } from '@/lib/caps';
 import { addCreative, deleteCreative } from '@/lib/creatives';
@@ -57,14 +57,91 @@ function randomToken(len: number, chars = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLM
   return Array.from(randomBytes(len), (b) => chars[b % chars.length]).join('');
 }
 
-export async function createAdvertiser(fd: FormData) {
-  const me = await requireAdmin();
-  const res = await exec(
-    `INSERT INTO advertisers (name, company, email, tax_id, postback_secret) VALUES (?, ?, ?, ?, ?)`,
-    [str(fd, 'name'), optStr(fd, 'company'), optStr(fd, 'email'), optStr(fd, 'tax_id'), randomToken(32, '0123456789abcdef')],
+type FormResult = { ok?: string; error?: string } | null;
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[a-z]{2,}$/i;
+
+/** Fields of the add/edit advertiser forms. */
+function advertiserFields(fd: FormData) {
+  const name = str(fd, 'name').slice(0, 200);
+  const email = str(fd, 'email').toLowerCase();
+  const website = str(fd, 'website');
+  if (!name) return { error: 'Enter the advertiser\'s name.' };
+  if (!EMAIL_RE.test(email) || email.length > 200) return { error: 'Enter a valid email address.' };
+  if (website && !/^https?:\/\/[^\s]+$/i.test(website)) return { error: 'Website must start with http:// or https://' };
+  return {
+    name, email,
+    company: optStr(fd, 'company')?.slice(0, 200) ?? null,
+    website: website ? website.slice(0, 255) : null,
+    tax_id: optStr(fd, 'tax_id')?.slice(0, 64) ?? null,
+    reference_id: optStr(fd, 'reference_id')?.slice(0, 64) ?? null,
+    account_manager: optStr(fd, 'account_manager')?.slice(0, 200) ?? null,
+    notes: optStr(fd, 'notes')?.slice(0, 5000) ?? null,
+  };
+}
+
+async function advertiserEmailTaken(email: string, exceptId = 0): Promise<boolean> {
+  const rows = await q(
+    `SELECT 1 FROM advertisers WHERE email = ? AND id <> ?
+     UNION ALL SELECT 1 FROM users WHERE email = ? AND (advertiser_id IS NULL OR advertiser_id <> ?) LIMIT 1`,
+    [email, exceptId, email, exceptId],
   );
-  await audit(me, 'create', 'advertiser', res.insertId);
-  revalidatePath('/admin/advertisers');
+  return rows.length > 0;
+}
+
+export async function createAdvertiser(_: FormResult, fd: FormData): Promise<FormResult> {
+  const me = await requireAdmin();
+  const f = advertiserFields(fd);
+  if ('error' in f) return { error: f.error };
+  const status = oneOf(str(fd, 'status') || 'active', ['active', 'pending', 'paused'] as const);
+  const password = String(fd.get('password') ?? '');
+  if (password && password.length < MIN_PASSWORD) return { error: `Password must be at least ${MIN_PASSWORD} characters, or leave it empty for no login yet.` };
+  if (await advertiserEmailTaken(f.email)) return { error: `${f.email} is already used by another advertiser or login.` };
+  const hash = password ? await hashPassword(password) : null;
+
+  let aid: number;
+  try {
+    aid = await tx(async (t) => {
+      const res = await t.exec(
+        `INSERT INTO advertisers (name, email, company, website, tax_id, reference_id, account_manager, notes, status, postback_secret)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [f.name, f.email, f.company, f.website, f.tax_id, f.reference_id, f.account_manager, f.notes, status,
+         randomToken(32, '0123456789abcdef')],
+      );
+      if (hash) await t.exec(`INSERT INTO users (email, password_hash, role, advertiser_id) VALUES (?, ?, 'advertiser', ?)`, [f.email, hash, res.insertId]);
+      return res.insertId;
+    });
+  } catch (err) {
+    console.error('create advertiser', err);
+    return { error: 'Could not save the advertiser. Check that the email isn\'t used already.' };
+  }
+  await audit(me, 'create', 'advertiser', aid, hash ? { login: f.email } : undefined);
+  revalidatePath('/admin', 'layout');
+  redirect(`/admin/advertisers/${aid}?created=1`);
+}
+
+export async function updateAdvertiser(_: FormResult, fd: FormData): Promise<FormResult> {
+  const me = await requireAdmin();
+  const aid = id(fd);
+  const f = advertiserFields(fd);
+  if ('error' in f) return { error: f.error };
+  if (await advertiserEmailTaken(f.email, aid)) return { error: `${f.email} is already used by another advertiser or login.` };
+  await exec(
+    `UPDATE advertisers SET name = ?, email = ?, company = ?, website = ?, tax_id = ?, reference_id = ?, account_manager = ?, notes = ?
+     WHERE id = ?`,
+    [f.name, f.email, f.company, f.website, f.tax_id, f.reference_id, f.account_manager, f.notes, aid],
+  );
+  const login = str(fd, 'login_email').toLowerCase();
+  if (login) {
+    if (!EMAIL_RE.test(login)) return { error: 'Sign-in email doesn\'t look right.' };
+    try {
+      await exec(`UPDATE users SET email = ? WHERE advertiser_id = ?`, [login, aid]);
+    } catch {
+      return { error: `Another login already uses ${login}.` };
+    }
+  }
+  await audit(me, 'edit_profile', 'advertiser', aid);
+  revalidatePath('/admin', 'layout');
+  return { ok: 'Advertiser saved.' };
 }
 
 export async function createPublisher(fd: FormData) {
@@ -551,7 +628,7 @@ export async function setLoginPassword(_: { ok?: string; error?: string } | null
     }
   }
   await audit(me, 'set_password', role, eid);
-  revalidatePath(role === 'publisher' ? `/admin/publishers/${eid}` : '/admin/advertisers');
+  revalidatePath(`/admin/${role}s/${eid}`);
   return { ok: `Password set. They sign in with ${email}; existing sessions were signed out.` };
 }
 

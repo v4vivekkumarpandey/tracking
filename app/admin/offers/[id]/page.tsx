@@ -15,7 +15,7 @@ import { TargetingSummary } from '../../../_components/TargetingSummary';
 import { EditOffer, type EditableOffer } from './EditOffer';
 
 type Offer = EditableOffer & {
-  advertiser: string; postback_secret: string; visibility: string; status: string;
+  advertiser_id: number; advertiser: string; postback_secret: string; visibility: string; status: string;
   thumb_key: string | null; thumb_mime: string | null;
 };
 
@@ -60,7 +60,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
 
       <div className="card stack">
         <div className="row">
-          <span>Advertiser: <strong>{o.advertiser}</strong></span>
+          <span>Advertiser: <Link href={`/admin/advertisers/${o.advertiser_id}`}><strong>{o.advertiser}</strong></Link></span>
           <span>Model: <strong>{o.payout_model}</strong></span>
           <span>Revenue: <strong>{o.revenue_percent ? `${o.revenue_percent}% of sale` : money(o.default_revenue)}</strong></span>
           <span>Payout: <strong>{o.payout_percent ? `${o.payout_percent}% of sale` : money(o.default_payout)}</strong></span>

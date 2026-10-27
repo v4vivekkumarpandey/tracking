@@ -45,7 +45,7 @@ export default async function AdminDomains() {
               <tr key={d.id}>
                 <td><strong>{d.hostname}</strong></td>
                 <td>
-                  <Link href={d.owner_type === 'publisher' ? `/admin/publishers/${d.owner_id}` : '/admin/advertisers'}>{d.owner_name ?? `#${d.owner_id}`}</Link>
+                  <Link href={d.owner_type === 'publisher' ? `/admin/publishers/${d.owner_id}` : `/admin/advertisers/${d.owner_id}`}>{d.owner_name ?? `#${d.owner_id}`}</Link>
                   <div className="muted">{d.owner_type}</div>
                 </td>
                 <td>

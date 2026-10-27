@@ -512,4 +512,14 @@ export const migrations: { version: number; statements: string[] }[] = [
       `ALTER TABLE publisher_offer_access ADD COLUMN terms_accepted_at DATETIME(3) NULL`,
     ],
   },
+  {
+    version: 13,
+    statements: [
+      // Admin-only advertiser fields: your own reference (e.g. the ID in Everflow), who manages them, private notes.
+      `ALTER TABLE advertisers
+         ADD COLUMN reference_id VARCHAR(64) NULL,
+         ADD COLUMN account_manager VARCHAR(200) NULL,
+         ADD COLUMN notes TEXT NULL`,
+    ],
+  },
 ];
