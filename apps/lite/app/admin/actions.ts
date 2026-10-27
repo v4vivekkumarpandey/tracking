@@ -13,6 +13,7 @@ import { parseRule } from '@/lib/ipRules';
 import { refreshDomain, removeDomain, setDisabled, type DomainRow } from '@/lib/domains';
 import { generateInvoices, setInvoiceStatus } from '@/lib/invoices';
 import { clearLinkCache } from '@/lib/links';
+import { mergePublishers } from '@/lib/merge';
 import { DEFAULTS, getSettings, saveSettings, type SettingKey, type Settings } from '@/lib/settings';
 import { MIN_PASSWORD, hashPassword, tempPassword } from '@/lib/password';
 import { addMethod, methodLabel, removeMethod, setDefault } from '@/lib/paymentMethods';
@@ -523,6 +524,27 @@ export async function updatePublisherProfile(_: { ok?: string; error?: string } 
   await audit(me, 'edit_profile', 'publisher', pid);
   revalidatePath(`/admin/publishers/${pid}`);
   return { ok: 'Profile saved.' };
+}
+
+/** Moves everything of another publisher into this one and deletes the other. */
+export async function mergePublisherAction(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const into = id(fd);
+  const from = Number(fd.get('from_id'));
+  if (!Number.isInteger(from) || from <= 0) return { error: 'Choose the publisher to merge.' };
+  if (fd.get('confirm') !== 'on') return { error: 'Tick the box to confirm. A merge can\'t be undone.' };
+  let res: Awaited<ReturnType<typeof mergePublishers>>;
+  try {
+    res = await mergePublishers(from, into, me);
+  } catch (err) {
+    console.error('merge publishers', err);
+    return { error: 'The merge failed and nothing was changed. Check the server log.' };
+  }
+  if ('error' in res) return { error: res.error };
+  clearLinkCache();
+  revalidatePath('/admin', 'layout');
+  const login = res.login === 'moved' ? ' Their login now signs in to this account.' : res.login === 'removed' ? ' Their login was removed.' : '';
+  return { ok: `Merged: ${res.links} links, ${res.clicks} clicks, ${res.conversions} conversions, ${res.payments} payments moved.${login}` };
 }
 
 export async function addPaymentMethodAdmin(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {

@@ -2,6 +2,7 @@ import { parseClickId } from './clickid';
 import type { Scope } from './dashboard';
 import { q } from './db';
 import { parseIp } from './ipRules';
+import { currentPublisherId } from './merge';
 import { SUB_FIELDS } from './subs';
 
 // Raw click search and click-ID lookup for the Click log pages. Scoped like
@@ -84,8 +85,9 @@ export type Lookup = {
  */
 export async function lookupClick(scope: Scope, clickId: string): Promise<Lookup | null> {
   const id = clickId.toLowerCase();
-  const c = parseClickId(id);
-  if (!c) return null;
+  const parsed = parseClickId(id);
+  if (!parsed) return null;
+  const c = { ...parsed, publisherId: await currentPublisherId(parsed.publisherId) };
   const [o] = await q<{ name: string; advertiser_id: number; publisher: string | null }>(
     `SELECT o.name, o.advertiser_id, (SELECT name FROM publishers WHERE id = ?) AS publisher FROM offers o WHERE o.id = ?`,
     [c.publisherId, c.offerId],
