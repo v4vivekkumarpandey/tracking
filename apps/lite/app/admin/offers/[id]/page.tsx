@@ -124,7 +124,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                   <td><Link href={`/admin/publishers/${a.publisher_id}`}>{a.name}</Link></td>
                   <td><span className={`badge ${a.status}`}>{a.status}</span></td>
                   <td className="num">{a.payout_override ? money(a.payout_override) : '–'}</td>
-                  <td>{a.code ? <code>{base}/c/{a.code}?sub1=</code> : '–'}</td>
+                  <td>{a.code ? <code>{base}/c/{a.code}?source_id=&amp;sub1=</code> : '–'}</td>
                   <td className="actions">
                     {a.status !== 'approved' && (
                       <form action={approvePublisher} className="inline">
