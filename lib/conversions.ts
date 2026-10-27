@@ -4,6 +4,7 @@ import { fraudScore } from './fraud';
 import { sourceLabel } from './sourceLabels';
 import { exec, isDuplicate, q, tx } from './db';
 import { expand } from './macros';
+import { currentPublisherId } from './merge';
 import { processOutbox } from './outbox';
 import { SUB_FIELDS, subColumns } from './subs';
 
@@ -55,8 +56,10 @@ export async function recordConversion(params: URLSearchParams, source: 's2s' | 
 
   if (!TOKEN.test(goal) || !TOKEN.test(txnId)) return reject(400, 'goal and txn_id must be max 128 chars of [A-Za-z0-9_.:-]');
   if (!AMOUNT.test(amount)) return reject(400, 'invalid amount');
-  const click = parseClickId(clickId);
-  if (!click) return reject(400, 'invalid click_id');
+  const parsed = parseClickId(clickId);
+  if (!parsed) return reject(400, 'invalid click_id');
+  // The ID names the publisher at click time; it may have been merged since.
+  const click = { ...parsed, publisherId: await currentPublisherId(parsed.publisherId) };
 
   const [offer] = await q<{ status: string; attribution_days: number; secret: string; goal_known: number }>(
     `SELECT o.status, o.attribution_days, adv.postback_secret AS secret, (g.id IS NOT NULL) AS goal_known

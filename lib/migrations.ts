@@ -475,4 +475,19 @@ export const migrations: { version: number; statements: string[] }[] = [
        FROM publishers WHERE payout_method IS NOT NULL AND payout_method <> ''`,
     ],
   },
+  {
+    // Merged publishers: click IDs carry the old publisher ID, so sales on
+    // clicks made before a merge are credited through this map.
+    version: 11,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS publisher_merges (
+        from_id   BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+        to_id     BIGINT UNSIGNED NOT NULL,
+        from_name VARCHAR(200) NOT NULL,
+        merged_by VARCHAR(200) NOT NULL,
+        merged_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        KEY ix_merge_to (to_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    ],
+  },
 ];

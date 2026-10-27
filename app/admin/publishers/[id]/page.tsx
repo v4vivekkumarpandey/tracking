@@ -13,6 +13,7 @@ import { ActionForm } from '../../../_components/ActionForm';
 import { PaymentMethods } from '../../../_components/PaymentMethods';
 import { ProfileFields } from '../../../_components/ProfileFields';
 import { methodLabel, methodsOf } from '@/lib/paymentMethods';
+import { MergePublisher } from './MergePublisher';
 
 type Pub = {
   id: number; name: string; company: string | null; email: string | null; country: string | null; website: string | null;
@@ -32,7 +33,7 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
   );
   if (!p) notFound();
 
-  const [postbacks, links, offers, deliveries, [bal], history, methods] = await Promise.all([
+  const [postbacks, links, offers, deliveries, [bal], history, methods, others, merged] = await Promise.all([
     q<{ id: number; url: string; offer_name: string | null; goal: string | null }>(
       `SELECT pb.id, pb.url, o.name AS offer_name, pb.goal FROM publisher_postbacks pb
        LEFT JOIN offers o ON o.id = pb.offer_id
@@ -53,6 +54,10 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
     balances(pid),
     paymentHistory(pid),
     methodsOf(pid),
+    q<{ id: number; name: string; email: string | null }>(`SELECT id, name, email FROM publishers WHERE id <> ? ORDER BY name`, [pid]),
+    q<{ from_id: number; from_name: string; merged_at: Date }>(
+      `SELECT from_id, from_name, merged_at FROM publisher_merges WHERE to_id = ? ORDER BY merged_at`, [pid],
+    ),
   ]);
 
   return (
@@ -80,6 +85,7 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
           <dt>Payment</dt><dd>{p.payout_method ? <><strong>{methodLabel(p.payout_method)}</strong> <span className="mono">{p.payout_details}</span></> : <span className="muted">not provided</span>}{p.tax_id && <span className="muted"> · tax ID {p.tax_id}</span>}
             {p.payment_changed_at && Date.now() - new Date(p.payment_changed_at).getTime() < 7 * 86_400_000 && <div className="error">Payment details changed {dateTime(p.payment_changed_at)}: confirm with the publisher before paying.</div>}</dd>
           <dt>Joined</dt><dd>{dateTime(p.created_at)}{p.referred_by && <> · referred by <Link href={`/admin/publishers/${p.referred_by}`}>{p.referrer}</Link></>}</dd>
+          {merged.length > 0 && <><dt>Merged in</dt><dd>{merged.map((m) => `#${m.from_id} ${m.from_name} (${dateTime(m.merged_at)})`).join(', ')}</dd></>}
         </dl>
       </div>
 
@@ -188,6 +194,8 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
           </tbody>
         </table>
       </div>
+
+      {others.length > 0 && <MergePublisher id={p.id} name={p.name} others={others} />}
     </>
   );
 }
