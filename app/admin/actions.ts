@@ -14,12 +14,18 @@ import { refreshDomain, removeDomain, setDisabled, type DomainRow } from '@/lib/
 import { generateInvoices, setInvoiceStatus } from '@/lib/invoices';
 import { clearLinkCache } from '@/lib/links';
 import { mergePublishers } from '@/lib/merge';
+import { approveWaiting } from '@/lib/access';
 import { DEFAULTS, getSettings, saveSettings, type SettingKey, type Settings } from '@/lib/settings';
 import { MIN_PASSWORD, hashPassword, tempPassword } from '@/lib/password';
 import { addMethod, methodLabel, removeMethod, setDefault } from '@/lib/paymentMethods';
 import { profileFrom } from '@/lib/profile';
 import { assertPublicUrl } from '@/lib/safeUrl';
 import { RESTRICTABLE } from '@/lib/sourceLabels';
+import { OS_TARGETS, VISIBILITY, type Visibility } from '@/lib/offerInfo';
+import { removeThumbnail, saveThumbnail } from '@/lib/thumbnails';
+import { traceLink, type TestDevice, type Trace } from '@/lib/linkTest';
+
+const VISIBILITIES = Object.keys(VISIBILITY) as Visibility[];
 
 function str(fd: FormData, k: string): string {
   return String(fd.get(k) ?? '').trim();
@@ -83,18 +89,34 @@ export async function setPublisherStatus(fd: FormData) {
   revalidatePath(`/admin/publishers/${pid}`);
 }
 
+/** Offer details for publishers from the new/edit offer forms. */
+function offerInfo(fd: FormData) {
+  const preview = str(fd, 'preview_url');
+  return {
+    description: optStr(fd, 'description'),
+    kpi: optStr(fd, 'kpi'),
+    preview_url: preview ? httpURL(preview) : null,
+    category: optStr(fd, 'category')?.slice(0, 100) ?? null,
+    terms: optStr(fd, 'terms'),
+    require_terms: fd.get('require_terms') ? 1 : 0,
+  };
+}
+
 export async function createOffer(fd: FormData) {
   const me = await requireAdmin();
   const days = Number(str(fd, 'attribution_days') || 30);
   if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error('attribution days must be 1-365');
+  const info = offerInfo(fd);
+  if (info.require_terms && !info.terms) throw new Error('Enter the terms publishers must accept, or untick "must accept".');
   const res = await exec(
     `INSERT INTO offers (advertiser_id, name, description, destination_url, payout_model,
-       default_revenue, default_payout, revenue_percent, payout_percent, attribution_days, auto_approve_days)
-     VALUES (?, ?, ?, ?, ?, COALESCE(?, 0), COALESCE(?, 0), ?, ?, ?, ?)`,
+       default_revenue, default_payout, revenue_percent, payout_percent, attribution_days, auto_approve_days,
+       kpi, preview_url, category, terms, require_terms, visibility)
+     VALUES (?, ?, ?, ?, ?, COALESCE(?, 0), COALESCE(?, 0), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id(fd, 'advertiser_id'),
       str(fd, 'name'),
-      optStr(fd, 'description'),
+      info.description,
       httpURL(str(fd, 'destination_url')),
       oneOf(str(fd, 'payout_model'), ['CPA', 'CPS', 'CPL', 'CPI'] as const),
       optNum(fd, 'default_revenue'),
@@ -103,6 +125,8 @@ export async function createOffer(fd: FormData) {
       optNum(fd, 'payout_percent'),
       days,
       await defaultAutoApprove(),
+      info.kpi, info.preview_url, info.category, info.terms, info.require_terms,
+      oneOf(str(fd, 'visibility') || 'public', VISIBILITIES),
     ],
   );
   await audit(me, 'create', 'offer', res.insertId);
@@ -208,6 +232,7 @@ const OFFER_FIELDS = [
   'name', 'destination_url', 'description', 'payout_model', 'attribution_days', 'default_revenue', 'default_payout',
   'revenue_percent', 'payout_percent', 'deeplink_enabled', 'deeplink_param', 'auto_approve_days',
   'countries', 'devices', 'daily_cap', 'monthly_cap', 'daily_budget', 'fallback_offer_id', 'fallback_url', 'blocked_sources',
+  'os_targets', 'kpi', 'preview_url', 'category', 'terms', 'require_terms',
 ] as const;
 type OfferEdit = Record<(typeof OFFER_FIELDS)[number], string | number | null>;
 
@@ -229,6 +254,7 @@ function targeting(fd: FormData, oid: number) {
   return {
     countries: codes.length ? [...new Set(codes)].join(',') : null,
     devices: devices.length && devices.length < 3 ? devices.join(',') : null, // none or all = no restriction
+    os_targets: Object.keys(OS_TARGETS).filter((k) => fd.getAll('os_targets').includes(k)).join(',') || null,
     daily_cap: whole('daily_cap'),
     monthly_cap: whole('monthly_cap'),
     daily_budget: optNum(fd, 'daily_budget'),
@@ -261,7 +287,7 @@ export async function updateOffer(_: { ok?: string; error?: string } | null, fd:
     next = {
       name: str(fd, 'name') || (() => { throw new Error('Name is required.'); })(),
       destination_url: httpURL(str(fd, 'destination_url')),
-      description: optStr(fd, 'description'),
+      ...offerInfo(fd),
       payout_model: oneOf(str(fd, 'payout_model'), ['CPA', 'CPS', 'CPL', 'CPI'] as const),
       attribution_days: days,
       default_revenue: optNum(fd, 'default_revenue') ?? '0',
@@ -273,6 +299,7 @@ export async function updateOffer(_: { ok?: string; error?: string } | null, fd:
       auto_approve_days: auto ? Number(auto) : null,
       ...targeting(fd, oid),
     };
+    if (next.require_terms && !next.terms) throw new Error('Enter the terms publishers must accept, or untick "must accept".');
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -313,6 +340,33 @@ export async function deleteCreativeAdmin(fd: FormData) {
   await deleteCreative(id(fd), oid);
   await audit(me, 'delete_creative', 'offer', oid);
   revalidatePath(`/admin/offers/${oid}`);
+}
+
+// ---------- Offer logo ----------
+
+export async function uploadThumbnailAdmin(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const oid = id(fd, 'offer_id');
+  const err = await saveThumbnail(oid, fd.get('file'));
+  if (err) return { error: err };
+  await audit(me, 'set_logo', 'offer', oid);
+  revalidatePath('/admin', 'layout');
+  return { ok: 'Logo saved.' };
+}
+
+export async function removeThumbnailAdmin(fd: FormData) {
+  const me = await requireAdmin();
+  const oid = id(fd, 'offer_id');
+  await removeThumbnail(oid);
+  await audit(me, 'remove_logo', 'offer', oid);
+  revalidatePath('/admin', 'layout');
+}
+
+// ---------- Link test ----------
+
+export async function linkTestAdmin(_: Trace | null, fd: FormData): Promise<Trace> {
+  await requireAdmin();
+  return traceLink(str(fd, 'url'), null, str(fd, 'device') as TestDevice);
 }
 
 // ---------- Landing pages ----------
@@ -418,10 +472,11 @@ export async function reviewOffer(fd: FormData) {
 export async function setOfferVisibility(fd: FormData) {
   const me = await requireAdmin();
   const oid = id(fd);
-  const visibility = oneOf(str(fd, 'visibility'), ['public', 'private'] as const);
+  const visibility = oneOf(str(fd, 'visibility'), VISIBILITIES);
   await exec(`UPDATE offers SET visibility = ?, updated_at = NOW(3) WHERE id = ?`, [visibility, oid]);
-  await audit(me, 'set_visibility', 'offer', oid, { visibility });
-  revalidatePath(`/admin/offers/${oid}`);
+  const approved = visibility === 'open' ? await approveWaiting(oid) : 0;
+  await audit(me, 'set_visibility', 'offer', oid, approved ? { visibility, approved_waiting: approved } : { visibility });
+  revalidatePath('/admin', 'layout');
 }
 
 export async function rejectAccess(fd: FormData) {

@@ -15,7 +15,7 @@ export function OffersTable({ rows, cols, hrefBase, labels = {}, empty, note }: 
   note?: string;
 }) {
   const m = (metric: 'clicks' | 'conversions' | 'cvr' | Col, v: number) => fmtMetric(metric, v, CURRENCY);
-  const name = (c: Col) => labels[c] ?? { revenue: 'Revenue', payout: 'Payout', margin: 'Margin', epc: 'EPC' }[c];
+  const name = (c: Col) => labels[c] ?? { revenue: 'Revenue', payout: 'Payout', margin: 'Profit', epc: 'EPC' }[c];
   const cell = (c: Col, o: OfferRow) =>
     c === 'margin' ? m(c, o.revenue - o.payout)
     : c === 'epc' ? (o.clicks ? m(c, o.payout / o.clicks) : '–')

@@ -7,7 +7,7 @@ export const METRIC_LABEL: Record<Metric, string> = {
   cvr: 'CVR',
   revenue: 'Revenue',
   payout: 'Payout',
-  margin: 'Margin',
+  margin: 'Profit',
   epc: 'EPC',
 };
 

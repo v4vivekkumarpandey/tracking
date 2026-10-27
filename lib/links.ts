@@ -27,7 +27,7 @@ const cache = new Map<string, { link: Link | null; exp: number }>();
 
 const LINK_SQL = `
 SELECT l.id, l.code, l.offer_id, l.publisher_id, o.advertiser_id, o.destination_url, o.deeplink_enabled, o.deeplink_param,
-       o.countries, o.devices, o.daily_cap, o.monthly_cap, o.daily_budget, o.fallback_offer_id, o.fallback_url, o.attribution_days,
+       o.countries, o.devices, o.os_targets, o.daily_cap, o.monthly_cap, o.daily_budget, o.fallback_offer_id, o.fallback_url, o.attribution_days,
        (l.status = 'active' AND o.status = 'active' AND p.status = 'active'
         AND COALESCE(a.status, '') = 'approved') AS active
 FROM tracking_links l
@@ -37,7 +37,7 @@ LEFT JOIN publisher_offer_access a ON a.offer_id = l.offer_id AND a.publisher_id
 
 type Row = {
   id: number; code: string; offer_id: number; publisher_id: number; advertiser_id: number; destination_url: string;
-  deeplink_enabled: number; deeplink_param: string; countries: string | null; devices: string | null;
+  deeplink_enabled: number; deeplink_param: string; countries: string | null; devices: string | null; os_targets: string | null;
   daily_cap: number | null; monthly_cap: number | null; daily_budget: string | null;
   fallback_offer_id: number | null; fallback_url: string | null; attribution_days: number; active: number;
 };
@@ -48,7 +48,7 @@ function toLink(r: Row): Link {
     advertiserId: Number(r.advertiser_id), destination: r.destination_url, active: Number(r.active) === 1,
     deeplinkEnabled: Number(r.deeplink_enabled) === 1, deeplinkParam: r.deeplink_param || 'click_id',
     rules: {
-      countries: r.countries, devices: r.devices,
+      countries: r.countries, devices: r.devices, os: r.os_targets,
       daily_cap: r.daily_cap === null ? null : Number(r.daily_cap),
       monthly_cap: r.monthly_cap === null ? null : Number(r.monthly_cap),
       daily_budget: r.daily_budget === null ? null : Number(r.daily_budget),

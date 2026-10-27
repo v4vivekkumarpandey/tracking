@@ -3,7 +3,8 @@ import { offerUsage } from './caps';
 import { newClickId } from './clickid';
 import { exec, q } from './db';
 import { deepLinkTarget } from './deeplink';
-import { deviceOf } from './device';
+import { deviceOf, osOf } from './device';
+import { LINK_TEST_HEADER, isLinkTest } from './linkTestToken';
 import { countryOf } from './geo';
 import { blockedBy, ipInfo } from './ipIntel';
 import { linkFor, type Link } from './links';
@@ -22,8 +23,10 @@ import { classify } from './trafficSource';
 const DUP_WINDOW_MS = 10_000; // same IP + offer again within this → duplicate
 
 export type Visitor = {
-  ip: string; ua: string; country: string; device: string; referer: string;
+  ip: string; ua: string; country: string; device: string; os: string; referer: string;
   asn: number | null; asnOrg: string; datacenter: boolean;
+  /** A Link Test run from the panel: recorded as a bot click, left out of stats. */
+  test: boolean;
 };
 
 export async function visitorOf(req: NextRequest, ctx: TrackingContext): Promise<Visitor> {
@@ -34,6 +37,8 @@ export async function visitorOf(req: NextRequest, ctx: TrackingContext): Promise
     ua,
     country,
     device: deviceOf(ua),
+    os: osOf(ua),
+    test: isLinkTest(req.headers.get(LINK_TEST_HEADER)),
     referer: trunc(req.headers.get('referer'), 512),
     asn: net.asn,
     asnOrg: net.org,
@@ -47,6 +52,7 @@ export async function canServe(link: Link, v: Visitor): Promise<Block> {
 
 /** The admin blocklist, then data-center traffic when Protection is set to block it. */
 export async function protectionBlock(v: Visitor): Promise<Block> {
+  if (v.test) return null; // the test runs from our own server, a data center
   if (await blockedBy(v.ip, v.asn)) return 'ip';
   if (v.datacenter && (await getSettingsCached()).datacenter_traffic === 'block') return 'dc';
   return null;
@@ -142,9 +148,10 @@ async function record(link: Link, v: Visitor, subs: SubValues, smartLinkId: numb
     );
     const unique = !prev?.last;
     const isDup = !!prev?.last && now.getTime() - new Date(prev.last).getTime() < DUP_WINDOW_MS;
-    const isBot = !v.ua || BOT_UA.test(v.ua);
-    const ipType = reason === 'ip' || reason === 'dc' ? 'blocked' : v.datacenter ? 'datacenter' : '';
-    const src = classify({ params, referer: v.referer, ua: v.ua, selfHost: new URL(trackingBase()).hostname });
+    const isBot = v.test || !v.ua || BOT_UA.test(v.ua);
+    const ipType = reason === 'ip' || reason === 'dc' ? 'blocked' : v.datacenter && !v.test ? 'datacenter' : '';
+    const src = v.test ? { source: 'direct', channel: 'direct', refererHost: '', evidence: 'link test from the panel' }
+      : classify({ params, referer: v.referer, ua: v.ua, selfHost: new URL(trackingBase()).hostname });
     await exec(
       `INSERT INTO clicks (click_id, ts, offer_id, publisher_id, link_id, ip, ua, referer, country, device,
                            ${SUB_FIELDS.join(', ')}, is_bot, is_duplicate, smart_link_id, redirect_reason,
@@ -155,6 +162,7 @@ async function record(link: Link, v: Visitor, subs: SubValues, smartLinkId: numb
        src.source, src.channel, src.refererHost.slice(0, 100), src.evidence.slice(0, 100),
        v.asn, v.asnOrg, ipType, lpId],
     );
+    if (v.test) return clickId; // stored for the Click log, but not counted
     // A click sent to a fallback URL counts as "redirected", not as a click
     // on the offer, so the offer's conversion rate stays honest.
     const clicks = reason ? 0 : 1;

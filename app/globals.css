@@ -206,6 +206,12 @@ label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--t
 .offer-card h2 { font-size: 15px; margin: 0; }
 .offer-card footer { margin-top: auto; }
 .clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin: 0; }
+.offer-card header a { flex: 1; }
+.offer-thumb { width: 40px; height: 40px; object-fit: contain; border-radius: 6px; border: 1px solid var(--line); background: #fff; flex: none; }
+.offer-thumb.large { width: 96px; height: 96px; }
+.offer-title { display: flex; align-items: center; gap: 12px; }
+.small { font-size: 12px; }
+.inline-select { display: inline-flex; align-items: center; gap: 6px; }
 .offer-meta { display: flex; gap: 24px; flex-wrap: wrap; }
 .offer-meta > div { display: flex; flex-direction: column; }
 .offer-meta .muted { font-size: 12px; }

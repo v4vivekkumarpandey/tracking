@@ -8,7 +8,7 @@ import { quickBlock } from '../admin/actions';
 type Panel = 'admin' | 'advertiser' | 'publisher';
 
 const REDIRECT: Record<string, string> = {
-  geo: 'outside geo → fallback', device: 'wrong device → fallback', cap: 'cap reached → fallback',
+  geo: 'outside geo → fallback', device: 'wrong device → fallback', os: 'wrong OS → fallback', cap: 'cap reached → fallback',
   ip: 'IP blocked', dc: 'data center blocked',
 };
 
