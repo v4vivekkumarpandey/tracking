@@ -450,4 +450,29 @@ export const migrations: { version: number; statements: string[] }[] = [
          ADD COLUMN sub10 VARCHAR(255) NOT NULL DEFAULT ''`,
     ],
   },
+  {
+    // Publisher contact details and saved payment methods.
+    version: 10,
+    statements: [
+      `ALTER TABLE publishers
+         ADD COLUMN phone VARCHAR(40) NULL,
+         ADD COLUMN messenger VARCHAR(100) NULL,
+         ADD COLUMN address TEXT NULL,
+         ADD COLUMN payment_changed_at DATETIME(3) NULL`,
+      `CREATE TABLE IF NOT EXISTS publisher_payment_methods (
+        id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        publisher_id BIGINT UNSIGNED NOT NULL,
+        type         VARCHAR(16) NOT NULL,
+        details      TEXT NOT NULL,
+        is_default   TINYINT(1) NOT NULL DEFAULT 0,
+        created_at   DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        KEY ix_pm_pub (publisher_id),
+        CONSTRAINT fk_pm_pub FOREIGN KEY (publisher_id) REFERENCES publishers(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+      // Existing free-text details become each publisher's default method.
+      `INSERT INTO publisher_payment_methods (publisher_id, type, details, is_default)
+       SELECT id, payout_method, JSON_OBJECT('notes', COALESCE(payout_details, '')), 1
+       FROM publishers WHERE payout_method IS NOT NULL AND payout_method <> ''`,
+    ],
+  },
 ];

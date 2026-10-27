@@ -3,7 +3,7 @@ import { fromCents, pctOf, toCents } from './money';
 import { getSettings, referralTerms } from './settings';
 
 export type Balance = {
-  publisher_id: number; name: string; payout_method: string | null; payout_details: string | null;
+  publisher_id: number; name: string; payout_method: string | null; payout_details: string | null; payment_changed_at: Date | null;
   approved: number; pending: number; referral: number; paid: number; balance: number;
 };
 
@@ -16,7 +16,7 @@ export async function balances(publisherId?: number): Promise<Balance[]> {
   const { pct, months } = referralTerms(await getSettings());
   const [rows, refs] = await Promise.all([
     q<Record<string, string | null>>(
-      `SELECT p.id AS publisher_id, p.name, p.payout_method, p.payout_details,
+      `SELECT p.id AS publisher_id, p.name, p.payout_method, p.payout_details, p.payment_changed_at,
               COALESCE(c.approved, 0) AS approved, COALESCE(c.pending, 0) AS pending, COALESCE(pay.paid, 0) AS paid
        FROM publishers p
        LEFT JOIN (SELECT publisher_id,
@@ -35,6 +35,7 @@ export async function balances(publisherId?: number): Promise<Balance[]> {
     const referral = pctOf(refs.get(Number(r.publisher_id))?.approved ?? 0, pct);
     return {
       publisher_id: Number(r.publisher_id), name: String(r.name), payout_method: r.payout_method, payout_details: r.payout_details,
+      payment_changed_at: (r.payment_changed_at as unknown as Date | null) ?? null,
       approved: Number(fromCents(approved)), pending: Number(r.pending ?? 0), referral: Number(fromCents(referral)),
       paid: Number(fromCents(paid)), balance: Number(fromCents(approved + referral - paid)),
     };

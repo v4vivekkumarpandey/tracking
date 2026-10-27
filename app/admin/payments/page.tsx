@@ -4,6 +4,7 @@ import { balances } from '@/lib/balance';
 import { q } from '@/lib/db';
 import { dateTime, money } from '@/lib/format';
 import { RecordPayment } from '../RecordPayment';
+import { methodLabel } from '@/lib/paymentTypes';
 
 export default async function Payments() {
   await requireAdmin();
@@ -32,7 +33,8 @@ export default async function Payments() {
             {owed.map((r) => (
               <tr key={r.publisher_id}>
                 <td><Link href={`/admin/publishers/${r.publisher_id}`}>{r.name}</Link></td>
-                <td className="wrap">{r.payout_method ? <><strong>{r.payout_method}</strong><div className="muted mono">{r.payout_details}</div></> : <span className="error">Not provided</span>}</td>
+                <td className="wrap">{r.payout_method ? <><strong>{methodLabel(r.payout_method)}</strong><div className="muted mono">{r.payout_details}</div>
+                  {r.payment_changed_at && Date.now() - new Date(r.payment_changed_at).getTime() < 7 * 86_400_000 && <div className="error">Changed {dateTime(r.payment_changed_at)}: confirm first</div>}</> : <span className="error">Not provided</span>}</td>
                 <td className="num">{money(r.approved)}</td>
                 <td className="num">{money(r.referral)}</td>
                 <td className="num">{money(r.paid)}</td>

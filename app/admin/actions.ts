@@ -14,7 +14,9 @@ import { refreshDomain, removeDomain, setDisabled, type DomainRow } from '@/lib/
 import { generateInvoices, setInvoiceStatus } from '@/lib/invoices';
 import { clearLinkCache } from '@/lib/links';
 import { DEFAULTS, getSettings, saveSettings, type SettingKey, type Settings } from '@/lib/settings';
-import { hashPassword, tempPassword } from '@/lib/password';
+import { MIN_PASSWORD, hashPassword, tempPassword } from '@/lib/password';
+import { addMethod, methodLabel, removeMethod, setDefault } from '@/lib/paymentMethods';
+import { profileFrom } from '@/lib/profile';
 import { assertPublicUrl } from '@/lib/safeUrl';
 import { RESTRICTABLE } from '@/lib/sourceLabels';
 
@@ -466,6 +468,91 @@ export async function resetLogin(_: ResetState, fd: FormData): Promise<ResetStat
   return { password, email: user?.email ?? entity.email ?? '' };
 }
 
+/** Sets a password the admin chose (creates the login if there is none yet). */
+export async function setLoginPassword(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const role = oneOf(str(fd, 'role'), ['publisher', 'advertiser'] as const);
+  const eid = id(fd);
+  const password = String(fd.get('password') ?? '');
+  if (password.length < MIN_PASSWORD) return { error: `Password must be at least ${MIN_PASSWORD} characters.` };
+  if (password !== String(fd.get('password2') ?? '')) return { error: 'The passwords do not match.' };
+  const table = role === 'publisher' ? 'publishers' : 'advertisers';
+  const col = role === 'publisher' ? 'publisher_id' : 'advertiser_id';
+  const [entity] = await q<{ email: string | null }>(`SELECT email FROM ${table} WHERE id = ?`, [eid]);
+  if (!entity) return { error: 'Account not found.' };
+  const hash = await hashPassword(password);
+  const [user] = await q<{ id: number; email: string }>(`SELECT id, email FROM users WHERE ${col} = ?`, [eid]);
+  let email = user?.email ?? '';
+  if (user) {
+    await exec(`UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?`, [hash, user.id]);
+  } else {
+    email = (entity.email ?? '').toLowerCase();
+    if (!email) return { error: 'Add a contact email to this account first; it becomes the sign-in email.' };
+    try {
+      await exec(`INSERT INTO users (email, password_hash, role, ${col}) VALUES (?, ?, ?, ?)`, [email, hash, role, eid]);
+    } catch {
+      return { error: `Another login already uses ${email}.` };
+    }
+  }
+  await audit(me, 'set_password', role, eid);
+  revalidatePath(role === 'publisher' ? `/admin/publishers/${eid}` : '/admin/advertisers');
+  return { ok: `Password set. They sign in with ${email}; existing sessions were signed out.` };
+}
+
+// ---------- Publisher profile & payment methods (admin) ----------
+
+export async function updatePublisherProfile(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const pid = id(fd);
+  const p = profileFrom(fd);
+  if ('error' in p) return { error: p.error };
+  await exec(
+    `UPDATE publishers SET name = ?, company = ?, email = ?, website = ?, country = ?, tax_id = ?, phone = ?, messenger = ?,
+                           address = ?, traffic_sources = ? WHERE id = ?`,
+    [p.name, p.company, p.email, p.website, p.country, p.tax_id, p.phone, p.messenger, p.address, p.traffic_sources, pid],
+  );
+  const login = str(fd, 'login_email').toLowerCase();
+  if (login) {
+    if (!/^[^\s@]{1,64}@[^\s@]{1,190}\.[a-z]{2,}$/i.test(login)) return { error: 'Sign-in email doesn\'t look right.' };
+    try {
+      await exec(`UPDATE users SET email = ? WHERE publisher_id = ?`, [login, pid]);
+    } catch {
+      return { error: `Another login already uses ${login}.` };
+    }
+  }
+  await audit(me, 'edit_profile', 'publisher', pid);
+  revalidatePath(`/admin/publishers/${pid}`);
+  return { ok: 'Profile saved.' };
+}
+
+export async function addPaymentMethodAdmin(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const pid = id(fd, 'publisher_id');
+  const type = str(fd, 'type');
+  const err = await addMethod(pid, type, fd, fd.get('make_default') === 'on');
+  if (err) return { error: err };
+  await audit(me, 'add_payment_method', 'publisher', pid, { type });
+  revalidatePath(`/admin/publishers/${pid}`);
+  return { ok: `${methodLabel(type)} saved.` };
+}
+
+export async function setDefaultPaymentMethodAdmin(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const me = await requireAdmin();
+  const pid = id(fd, 'publisher_id');
+  if (!(await setDefault(pid, id(fd, 'method_id')))) return { error: 'Payment method not found.' };
+  await audit(me, 'default_payment_method', 'publisher', pid, { id: str(fd, 'method_id') });
+  revalidatePath(`/admin/publishers/${pid}`);
+  return { ok: 'Default payment method changed.' };
+}
+
+export async function removePaymentMethodAdmin(fd: FormData) {
+  const me = await requireAdmin();
+  const pid = id(fd, 'publisher_id');
+  await removeMethod(pid, id(fd));
+  await audit(me, 'remove_payment_method', 'publisher', pid, { id: str(fd, 'id') });
+  revalidatePath(`/admin/publishers/${pid}`);
+}
+
 // ---------- Custom domains ----------
 
 async function domainRow(fd: FormData) {
@@ -562,7 +649,7 @@ export async function recordPayment(fd: FormData) {
   const date = (k: string) => (/^\d{4}-\d{2}-\d{2}$/.test(str(fd, k)) ? str(fd, k) : null);
   const res = await exec(
     `INSERT INTO payments (publisher_id, amount, method, reference, period_from, period_to, note) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [pid, amount, oneOf(str(fd, 'method'), ['paypal', 'wise', 'bank', 'crypto', 'other'] as const),
+    [pid, amount, oneOf(str(fd, 'method'), ['paypal', 'bank', 'upi', 'payoneer', 'wise', 'crypto', 'other'] as const),
      optStr(fd, 'reference'), date('period_from'), date('period_to'), optStr(fd, 'note')],
   );
   await audit(me, 'record_payment', 'publisher', pid, { payment_id: res.insertId, amount });

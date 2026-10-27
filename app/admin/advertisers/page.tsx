@@ -3,6 +3,7 @@ import { q } from '@/lib/db';
 import { dateTime } from '@/lib/format';
 import { createAdvertiser, setAdvertiserStatus } from '../actions';
 import { ResetLogin } from '../ResetLogin';
+import { SetPassword } from '../SetPassword';
 
 type Advertiser = {
   id: number; name: string; company: string | null; email: string | null; website: string | null;
@@ -38,7 +39,7 @@ export default async function Advertisers() {
                 <td>{a.name}<div className="muted">{a.company}</div>{a.website && <div className="muted">{a.website}</div>}</td>
                 <td>
                   <div>{a.login ?? <span className="muted">{a.email ?? 'no email'}</span>}</div>
-                  <ResetLogin role="advertiser" id={a.id} hasLogin={!!a.login} />
+                  <ResetLogin role="advertiser" id={a.id} hasLogin={!!a.login} /> <SetPassword role="advertiser" id={a.id} />
                 </td>
                 <td><code>{a.postback_secret}</code></td>
                 <td>
