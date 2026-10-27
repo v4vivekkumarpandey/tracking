@@ -490,4 +490,26 @@ export const migrations: { version: number; statements: string[] }[] = [
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     ],
   },
+  {
+    // Offer info for publishers (KPI, preview, category, terms, logo) and OS targeting.
+    // visibility gains 'open': public, and publishers get the link without approval.
+    version: 12,
+    statements: [
+      `ALTER TABLE offers
+         ADD COLUMN kpi TEXT NULL,
+         ADD COLUMN preview_url TEXT NULL,
+         ADD COLUMN category VARCHAR(100) NULL,
+         ADD COLUMN terms TEXT NULL,
+         ADD COLUMN require_terms TINYINT(1) NOT NULL DEFAULT 0,
+         ADD COLUMN os_targets VARCHAR(64) NULL,
+         ADD COLUMN thumb_key CHAR(32) NULL,
+         ADD COLUMN thumb_mime VARCHAR(32) NULL`,
+      `CREATE TABLE IF NOT EXISTS offer_thumbnails (
+        offer_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+        data     MEDIUMBLOB NOT NULL,
+        CONSTRAINT fk_thumb_offer FOREIGN KEY (offer_id) REFERENCES offers(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB`,
+      `ALTER TABLE publisher_offer_access ADD COLUMN terms_accepted_at DATETIME(3) NULL`,
+    ],
+  },
 ];

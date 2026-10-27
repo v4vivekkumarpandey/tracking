@@ -1,5 +1,7 @@
 import { ActionForm } from '../../../_components/ActionForm';
 import { CURRENCY } from '@/lib/format';
+import { OS_TARGETS } from '@/lib/offerInfo';
+import { OfferInfoFields } from '../../../_components/OfferInfoFields';
 import { RESTRICTABLE, sourceLabel } from '@/lib/sourceLabels';
 import { updateOffer } from '../../actions';
 
@@ -9,7 +11,8 @@ export type EditableOffer = {
   payout_percent: string | null; deeplink_enabled: number; deeplink_param: string; auto_approve_days: number | null;
   countries: string | null; devices: string | null; daily_cap: number | null; monthly_cap: number | null;
   daily_budget: string | null; fallback_offer_id: number | null; fallback_url: string | null;
-  blocked_sources: string | null;
+  blocked_sources: string | null; os_targets: string | null;
+  kpi: string | null; preview_url: string | null; category: string | null; terms: string | null; require_terms: number;
 };
 
 const num = (v: string | number | null) => (v === null || v === undefined ? '' : String(Number(v)));
@@ -17,10 +20,11 @@ const num = (v: string | number | null) => (v === null || v === undefined ? '' :
 /** Collapsible edit form; saving records every change in the offer's history. */
 export function EditOffer({ o, otherOffers }: { o: EditableOffer; otherOffers: { id: number; name: string }[] }) {
   const devices = (o.devices ?? '').split(',');
+  const oses = (o.os_targets ?? '').split(',');
   const blocked = (o.blocked_sources ?? '').split(',');
   return (
     <details className="card edit-offer">
-      <summary><strong>Edit offer</strong> <span className="muted">price, payout, landing page, targeting, caps, traffic sources, deep links, auto-approve</span></summary>
+      <summary><strong>Edit offer</strong> <span className="muted">price, payout, landing page, targeting, caps, traffic sources, deep links, auto-approve, publisher info</span></summary>
       <ActionForm action={updateOffer} submit="Save changes">
         <input type="hidden" name="id" value={o.id} />
         <div className="grid2">
@@ -56,6 +60,12 @@ export function EditOffer({ o, otherOffers }: { o: EditableOffer; otherOffers: {
               <label key={d} className="check"><input type="checkbox" name="devices" value={d} defaultChecked={devices.includes(d)} /> {d}</label>
             ))}
           </fieldset>
+          <fieldset className="checks">
+            <legend>Operating systems (none ticked = all)</legend>
+            {Object.entries(OS_TARGETS).map(([k, label]) => (
+              <label key={k} className="check"><input type="checkbox" name="os_targets" value={k} defaultChecked={oses.includes(k)} /> {label}</label>
+            ))}
+          </fieldset>
           <label>Daily conversion cap<input name="daily_cap" type="number" min={0} defaultValue={o.daily_cap ?? ''} /></label>
           <label>Monthly conversion cap<input name="monthly_cap" type="number" min={0} defaultValue={o.monthly_cap ?? ''} /></label>
           <label>Daily budget ({CURRENCY} revenue)<input name="daily_budget" inputMode="decimal" defaultValue={num(o.daily_budget)} /></label>
@@ -82,7 +92,8 @@ export function EditOffer({ o, otherOffers }: { o: EditableOffer; otherOffers: {
           <label className="check"><input type="checkbox" name="deeplink_enabled" defaultChecked={!!o.deeplink_enabled} /> Allow deep links (publishers may link to any page on the landing domain)</label>
           <label>Deep-link click ID parameter<input name="deeplink_param" defaultValue={o.deeplink_param} maxLength={32} /></label>
         </div>
-        <label>Description<textarea name="description" rows={4} defaultValue={o.description ?? ''} maxLength={5000} /></label>
+        <h3>For publishers</h3>
+        <OfferInfoFields o={o} />
         <p className="muted">Price changes apply to new conversions only; existing conversions keep the price they were recorded with.</p>
       </ActionForm>
     </details>

@@ -2,6 +2,10 @@
 
 import { randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { ensureLinks } from '@/lib/access';
+import { LISTED } from '@/lib/offerInfo';
+import { traceLink, type TestDevice, type Trace } from '@/lib/linkTest';
 import { changePassword as change, type FormState } from '@/lib/account';
 import { requirePublisher } from '@/lib/auth';
 import { audit, exec, q } from '@/lib/db';
@@ -24,19 +28,35 @@ const intId = (fd: FormData, k: string) => {
   return n;
 };
 
+/**
+ * Asks to run an offer. "Public, instant link" offers approve at once and
+ * create the tracking link; offers with required terms need the box ticked.
+ */
 export async function requestAccess(fd: FormData) {
   const me = await requirePublisher();
   const oid = intId(fd, 'offer_id');
-  const [offer] = await q<{ id: number }>(`SELECT id FROM offers WHERE id = ? AND status = 'active' AND visibility = 'public'`, [oid]);
+  const [offer] = await q<{ visibility: string; require_terms: number }>(
+    `SELECT visibility, require_terms FROM offers WHERE id = ? AND status = 'active' AND visibility IN ${LISTED}`, [oid],
+  );
   if (!offer) throw new Error('This offer is not available.');
+  const accepted = fd.get('accept_terms') === 'on';
+  if (Number(offer.require_terms) && !accepted) redirect(`/publisher/offers/${oid}?terms=required`);
+  const instant = offer.visibility === 'open';
   // A no-op if a request (or a decision) already exists: no re-request spam.
   await exec(
-    `INSERT INTO publisher_offer_access (publisher_id, offer_id, status) VALUES (?, ?, 'pending')
+    `INSERT INTO publisher_offer_access (publisher_id, offer_id, status, terms_accepted_at) VALUES (?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE publisher_id = publisher_id`,
-    [me.publisherId, oid],
+    [me.publisherId, oid, instant ? 'approved' : 'pending', accepted ? new Date() : null],
   );
-  await audit(`publisher:${me.publisherId}`, 'request_access', 'offer', oid);
+  if (instant) await ensureLinks(oid);
+  await audit(`publisher:${me.publisherId}`, instant ? 'instant_access' : 'request_access', 'offer', oid, accepted ? { terms_accepted: true } : undefined);
   revalidatePath('/publisher/offers', 'layout');
+  if (instant) redirect(`/publisher/offers/${oid}`);
+}
+
+export async function linkTestPublisher(_: Trace, fd: FormData): Promise<Trace> {
+  const me = await requirePublisher();
+  return traceLink(str(fd, 'url', 2000), me.publisherId, str(fd, 'device', 16) as TestDevice);
 }
 
 export async function addPostback(_: FormState, fd: FormData): Promise<FormState> {

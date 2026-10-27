@@ -79,7 +79,7 @@ export default async function Dashboard() {
           { metric: 'cvr', title: 'CVR' },
           { metric: 'revenue', title: 'Revenue' },
           { metric: 'payout', title: 'Payout' },
-          { metric: 'margin', title: 'Margin' },
+          { metric: 'margin', title: 'Profit' },
         ]}
         chartMetrics={['revenue', 'payout', 'margin', 'conversions', 'clicks']}
       />

@@ -1,5 +1,5 @@
 // Stat tile: label, month-to-date value, delta vs the same days last month,
-// a daily sparkline, and Today / Yesterday / Last month rows.
+// a daily sparkline, and Today / Yesterday / MTD / Last month rows.
 
 type Props = {
   title: string;
@@ -16,7 +16,7 @@ export function KpiCard({ title, value, delta, spark, rows }: Props) {
       <header className="kpi-head">{title}</header>
       <div className="kpi-body">
         <div className="kpi-period">
-          <span>Current month</span>
+          <span>Month to date</span>
           <Delta value={delta} />
         </div>
         <div className="kpi-value">{value}</div>

@@ -7,12 +7,16 @@ import { CURRENCY, dateTime, money, trackingBase } from '@/lib/format';
 import { CreativesManager } from '../../../_components/CreativesManager';
 import { LandingPagesManager } from '../../../_components/LandingPagesManager';
 import { landingPagesFor } from '@/lib/landing';
-import { addGoal, approvePublisher, deleteGoal, rejectAccess, reviewOffer, revokePublisher, setOfferStatus, setOfferVisibility } from '../../actions';
+import { addGoal, approvePublisher, deleteGoal, rejectAccess, removeThumbnailAdmin, reviewOffer, revokePublisher, setOfferStatus, setOfferVisibility, uploadThumbnailAdmin } from '../../actions';
+import { VISIBILITY, thumbUrl, type Visibility } from '@/lib/offerInfo';
+import { OfferInfo } from '../../../_components/OfferInfo';
+import { OfferLogo } from '../../../_components/OfferLogo';
 import { TargetingSummary } from '../../../_components/TargetingSummary';
 import { EditOffer, type EditableOffer } from './EditOffer';
 
 type Offer = EditableOffer & {
   advertiser: string; postback_secret: string; visibility: string; status: string;
+  thumb_key: string | null; thumb_mime: string | null;
 };
 
 export default async function OfferPage({ params }: { params: Promise<{ id: string }> }) {
@@ -64,7 +68,13 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
         </div>
         <TargetingSummary o={o} />
         <div>Destination: <code>{o.destination_url}</code></div>
-        {o.description && <div className="muted wrap">{o.description}</div>}
+        <OfferInfo o={o} />
+        <div className="muted">
+          {VISIBILITY[o.visibility as Visibility] ?? o.visibility}
+          {o.visibility === 'open' && ': publishers get their link at once'}
+          {o.visibility === 'public' && ': publishers request access, you approve'}
+          {o.visibility === 'private' && ': hidden from the marketplace; only publishers you approve below'}
+        </div>
         {o.status === 'pending' && (
           <div className="notice">
             <strong>Submitted by the advertiser.</strong> Set the publisher payout and approve to make it live.
@@ -81,11 +91,12 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
         <div className="row">
           <form action={setOfferVisibility} className="inline">
             <input type="hidden" name="id" value={o.id} />
-            <input type="hidden" name="visibility" value={o.visibility === 'public' ? 'private' : 'public'} />
-            <span className={`badge ${o.visibility === 'public' ? 'active' : 'paused'}`}>{o.visibility}</span>{' '}
-            <button className="secondary small" title={o.visibility === 'public' ? 'Hide from the publisher marketplace' : 'Show in the publisher marketplace'}>
-              {o.visibility === 'public' ? 'Make private' : 'Make public'}
-            </button>
+            <label className="inline-select">Visibility{' '}
+              <select name="visibility" defaultValue={o.visibility} aria-label="Visibility">
+                {Object.entries(VISIBILITY).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+              </select>
+            </label>{' '}
+            <button className="secondary small">Save visibility</button>
           </form>
           {(['active', 'paused', 'archived'] as const).filter((s) => s !== o.status && !(o.status === 'pending' && s === 'active')).map((s) => (
             <form key={s} action={setOfferStatus} className="inline">
@@ -200,6 +211,8 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           <button type="submit">Save goal</button>
         </form>
       </div>
+
+      <OfferLogo offerId={o.id} url={thumbUrl(o)} upload={uploadThumbnailAdmin} remove={removeThumbnailAdmin} />
 
       <LandingPagesManager offerId={o.id} defaultUrl={o.destination_url} pages={landings} as="admin" />
 

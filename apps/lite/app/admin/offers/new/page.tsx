@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { requireAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { CURRENCY } from '@/lib/format';
+import { VISIBILITY } from '@/lib/offerInfo';
 import { createOffer } from '../../actions';
+import { OfferInfoFields } from '../../../_components/OfferInfoFields';
 
 export default async function NewOffer() {
   await requireAdmin();
@@ -57,7 +59,12 @@ export default async function NewOffer() {
           </div>
 
           <h2>For publishers</h2>
-          <label>Description (allowed traffic, restrictions, target countries)<textarea name="description" rows={4} maxLength={5000} /></label>
+          <OfferInfoFields />
+          <label>Visibility
+            <select name="visibility" defaultValue="public">
+              {Object.entries(VISIBILITY).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+            </select>
+          </label>
 
           <div className="row">
             <button type="submit">Create offer</button>

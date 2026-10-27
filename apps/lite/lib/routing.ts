@@ -4,14 +4,15 @@
 export type Rules = {
   countries: string | null;  // "US,CA,GB" or null = everywhere
   devices: string | null;    // "mobile,tablet" or null = all
+  os?: string | null;        // "android,ios" or null = all
   daily_cap: number | null;  // max conversions per UTC day
   monthly_cap: number | null;
   daily_budget: number | null; // max revenue per UTC day
 };
 export type Usage = { today: number; month: number; revenueToday: number };
-export type Visitor = { country: string; device: string };
+export type Visitor = { country: string; device: string; os?: string };
 /** ip = on the admin blocklist, dc = data-center traffic while set to block. */
-export type Block = 'geo' | 'device' | 'cap' | 'ip' | 'dc' | null;
+export type Block = 'geo' | 'device' | 'os' | 'cap' | 'ip' | 'dc' | null;
 export type LandingPage = { id: number; name: string; url: string; weight: number };
 
 const list = (s: string | null) => (s ?? '').split(',').map((x) => x.trim().toUpperCase()).filter(Boolean);
@@ -23,6 +24,8 @@ export function blockReason(r: Rules, v: Visitor, u: Usage): Block {
   if (countries.length && !countries.includes(v.country.toUpperCase())) return 'geo';
   const devices = list(r.devices);
   if (devices.length && !devices.includes(v.device.toUpperCase())) return 'device';
+  const oses = list(r.os ?? null);
+  if (oses.length && !oses.includes((v.os ?? '').toUpperCase())) return 'os';
   if (r.daily_cap != null && u.today >= r.daily_cap) return 'cap';
   if (r.monthly_cap != null && u.month >= r.monthly_cap) return 'cap';
   if (r.daily_budget != null && u.revenueToday >= r.daily_budget) return 'cap';

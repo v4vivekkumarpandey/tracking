@@ -38,6 +38,18 @@ test('targeting and caps', () => {
   assert.equal(blockReason({ ...open, daily_budget: 500 }, { country: 'US', device: 'desktop' }, { ...idle, revenueToday: 500 }), 'cap');
 });
 
+test('OS targeting', () => {
+  const mobileOs = { ...open, os: 'android,ios' };
+  assert.equal(blockReason(mobileOs, { country: 'US', device: 'mobile', os: 'android' }, idle), null);
+  assert.equal(blockReason(mobileOs, { country: 'US', device: 'mobile', os: 'ios' }, idle), null);
+  assert.equal(blockReason(mobileOs, { country: 'US', device: 'desktop', os: 'windows' }, idle), 'os');
+  assert.equal(blockReason(mobileOs, { country: 'US', device: 'desktop', os: 'linux' }, idle), 'os');
+  assert.equal(blockReason(mobileOs, { country: 'US', device: 'desktop' }, idle), 'os'); // OS unknown on an OS-targeted offer
+  assert.equal(blockReason({ ...open, os: null }, { country: 'US', device: 'desktop', os: 'linux' }, idle), null);
+  // Device is checked before OS, so the reason names the first rule broken.
+  assert.equal(blockReason({ ...mobileOs, devices: 'mobile' }, { country: 'US', device: 'desktop', os: 'mac' }, idle), 'device');
+});
+
 test('smart link selection', () => {
   const a = { id: 'a', epc: 0.9 }, b = { id: 'b', epc: 0.1 }, c = { id: 'c', epc: 0 };
   assert.equal(pickOffer([], () => 0.5), null);

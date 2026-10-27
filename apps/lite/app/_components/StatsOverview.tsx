@@ -35,6 +35,7 @@ export async function StatsOverview({ scope, cards, chartMetrics, labels }: {
             rows={[
               ['Today', fmt(metric, value([current[today]], metric))],
               ['Yesterday', fmt(metric, value([yesterday], metric))],
+              ['MTD', fmt(metric, value(mtd, metric))],
               ['Last month', fmt(metric, value(last, metric))],
             ]}
           />

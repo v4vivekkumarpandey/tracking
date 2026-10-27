@@ -9,30 +9,39 @@ import { linkDomainOptions } from '@/lib/domains';
 import { CreativesGallery } from '../../../_components/CreativesGallery';
 import { TargetingSummary } from '../../../_components/TargetingSummary';
 import { payoutText } from '@/lib/offerView';
+import { LISTED, thumbUrl } from '@/lib/offerInfo';
+import { OfferInfo } from '../../../_components/OfferInfo';
 import { requestAccess } from '../../actions';
 import { LinkBuilder } from './LinkBuilder';
 
-export default async function PublisherOffer({ params }: { params: Promise<{ id: string }> }) {
+export default async function PublisherOffer({ params, searchParams }: {
+  params: Promise<{ id: string }>; searchParams: Promise<{ terms?: string }>;
+}) {
   const me = await requirePublisher();
   const oid = Number((await params).id);
   if (!Number.isInteger(oid)) notFound();
+  const termsMissing = (await searchParams).terms === 'required';
 
   const [o] = await q<{
     id: number; name: string; description: string | null; payout_model: string; attribution_days: number;
     default_payout: string; payout_percent: string | null; payout_override: string | null; access: string | null; code: string | null;
-    deeplink_enabled: number; destination_url: string;
-    countries: string | null; devices: string | null; daily_cap: number | null; monthly_cap: number | null; blocked_sources: string | null;
+    deeplink_enabled: number; destination_url: string; visibility: string;
+    countries: string | null; devices: string | null; os_targets: string | null; daily_cap: number | null; monthly_cap: number | null; blocked_sources: string | null;
+    kpi: string | null; preview_url: string | null; category: string | null; terms: string | null; require_terms: number;
+    thumb_key: string | null; thumb_mime: string | null;
   }>(
     `SELECT o.id, o.name, o.description, o.payout_model, o.attribution_days, o.default_payout, o.payout_percent,
-            o.deeplink_enabled, o.destination_url, o.countries, o.devices, o.daily_cap, o.monthly_cap, o.blocked_sources,
+            o.deeplink_enabled, o.destination_url, o.visibility, o.countries, o.devices, o.os_targets, o.daily_cap, o.monthly_cap, o.blocked_sources,
+            o.kpi, o.preview_url, o.category, o.terms, o.require_terms, o.thumb_key, o.thumb_mime,
             a.payout_override, a.status AS access, l.code
      FROM offers o
      LEFT JOIN publisher_offer_access a ON a.offer_id = o.id AND a.publisher_id = ?
      LEFT JOIN tracking_links l ON l.offer_id = o.id AND l.publisher_id = ? AND l.status = 'active'
-     WHERE o.id = ? AND o.status = 'active' AND (o.visibility = 'public' OR a.status = 'approved')`,
+     WHERE o.id = ? AND o.status = 'active' AND (o.visibility IN ${LISTED} OR a.status = 'approved')`,
     [me.publisherId, me.publisherId, oid],
   );
   if (!o) notFound();
+  const logo = thumbUrl(o);
 
   const [goals, creatives, landings] = await Promise.all([
     q<{ code: string; name: string; payout: string | null }>(`SELECT code, name, payout FROM offer_goals WHERE offer_id = ? ORDER BY code`, [oid]),
@@ -59,7 +68,7 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
   return (
     <>
       <div className="crumb"><Link href="/publisher/offers">Offers</Link></div>
-      <h1>{o.name}</h1>
+      <h1 className="offer-title">{logo && <img src={logo} alt="" className="offer-thumb" />}{o.name}</h1>
 
       <div className="card stack">
         <div className="offer-meta">
@@ -68,7 +77,7 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
           <div><span className="muted">Cookie window</span><strong>{o.attribution_days} days</strong></div>
         </div>
         <TargetingSummary o={o} showBudget={false} />
-        {o.description && <p className="wrap">{o.description}</p>}
+        <OfferInfo o={o} />
         {goals.length > 0 && (
           <table>
             <thead><tr><th>Event</th><th>Code</th><th className="num">Payout</th></tr></thead>
@@ -95,10 +104,19 @@ export default async function PublisherOffer({ params }: { params: Promise<{ id:
       ) : o.access === 'rejected' ? (
         <div className="card">Your request for this offer was not approved.</div>
       ) : (
-        <form action={requestAccess} className="card row">
+        <form action={requestAccess} className="card stack">
           <input type="hidden" name="offer_id" value={o.id} />
-          <span>Want to run this offer?</span>
-          <button type="submit">Request access</button>
+          <span>
+            Want to run this offer?
+            {o.visibility === 'open' ? ' You get your tracking link right away.' : ' The network reviews your request first.'}
+          </span>
+          {!!o.require_terms && (
+            <label className="check">
+              <input type="checkbox" name="accept_terms" required /> I have read and accept the terms and conditions above
+            </label>
+          )}
+          {termsMissing && <p className="error">Please accept the terms and conditions to continue.</p>}
+          <div><button type="submit">{o.visibility === 'open' ? 'Get tracking link' : 'Request access'}</button></div>
         </form>
       )}
     </>
