@@ -71,6 +71,7 @@ export function EditOffer({ o, otherOffers }: { o: EditableOffer; otherOffers: {
         <h3>Traffic sources</h3>
         <fieldset className="checks">
           <legend>Disallowed traffic sources (clicks still redirect; conversions are held for review)</legend>
+          <p className="muted">All sources are allowed by default. Tick only the ones this advertiser forbids.</p>
           {RESTRICTABLE.map((s) => (
             <label key={s} className="check"><input type="checkbox" name="blocked_sources" value={s} defaultChecked={blocked.includes(s)} /> {sourceLabel(s)}</label>
           ))}
