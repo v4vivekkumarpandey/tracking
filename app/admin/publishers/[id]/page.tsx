@@ -104,7 +104,7 @@ export default async function PublisherPage({ params }: { params: Promise<{ id: 
             {links.map((l) => (
               <tr key={l.code}>
                 <td><Link href={`/admin/offers/${l.offer_id}`}>{l.offer_name}</Link></td>
-                <td><code>{trackingBase()}/c/{l.code}?sub1=</code></td>
+                <td><code>{trackingBase()}/c/{l.code}?source_id=&amp;sub1=</code></td>
                 <td><span className={`badge ${l.access ?? 'pending'}`}>{l.access ?? 'no access'}</span></td>
               </tr>
             ))}
