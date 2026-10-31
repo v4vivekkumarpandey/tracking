@@ -5,6 +5,7 @@ import { ALL, type Scope } from '@/lib/dashboard';
 import { q } from '@/lib/db';
 import { RAW_GROUPS, parseRange, runReport, type Group, type ReportRow } from '@/lib/reports';
 import { sourceLabel } from '@/lib/sourceLabels';
+import { IMPORT_COLUMNS, exportCells, type OfferRow } from '@/lib/offerImport';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,6 +94,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pane
     cols.push({ header: 'traffic_source', value: (r) => (r.traffic_source ? sourceLabel(String(r.traffic_source)) : '') });
     cols.push({ header: 'status', value: s('status') }, { header: 'reject_reason', value: s('reject_reason') });
     return csvResponse(toCsv(rows, cols), `conversions-${from}-to-${to}.csv`);
+  }
+
+  // Same columns as the import, so the file can be edited in Excel and uploaded again.
+  if (report === 'offers' && p === 'admin') {
+    const cols: Column<Record<string, string>>[] = IMPORT_COLUMNS.map((c) => ({ header: c.key, value: (r) => r[c.key] }));
+    if (sp.template === '1') {
+      const [adv] = await q<{ email: string | null; id: number }>(`SELECT email, id FROM advertisers ORDER BY id LIMIT 1`);
+      const example = Object.fromEntries(IMPORT_COLUMNS.map((c) => [c.key, c.example]));
+      example.advertiser = adv ? String(adv.email ?? adv.id) : 'advertiser@example.com';
+      return csvResponse(toCsv([example], cols), 'offers-template.csv');
+    }
+    const rows = await q<OfferRow>(
+      `SELECT o.*, a.email AS advertiser_email FROM offers o JOIN advertisers a ON a.id = o.advertiser_id
+       WHERE o.status <> 'archived' OR ? = '1' ORDER BY o.id LIMIT ${MAX_ROWS}`, [sp.archived ?? ''],
+    );
+    return csvResponse(toCsv(rows.map(exportCells), cols), `offers-${isoDaysAgo(0)}.csv`);
   }
 
   if (report === 'payments' && p !== 'advertiser') {
