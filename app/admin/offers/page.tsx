@@ -41,7 +41,10 @@ export default async function Offers(props: { searchParams: Promise<{ status?: s
       <div className="crumb">Manage</div>
       <div className="title-row">
         <h1>Offers</h1>
-        <Link href="/admin/offers/new" className="button">+ New offer</Link>
+        <div className="row">
+          <Link href="/admin/offers/import" className="button secondary-button">Import / Export</Link>
+          <Link href="/admin/offers/new" className="button">+ New offer</Link>
+        </div>
       </div>
 
       <form className="card row" role="search">

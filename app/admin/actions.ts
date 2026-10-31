@@ -24,6 +24,8 @@ import { RESTRICTABLE } from '@/lib/sourceLabels';
 import { OS_TARGETS, VISIBILITY, type Visibility } from '@/lib/offerInfo';
 import { removeThumbnail, saveThumbnail } from '@/lib/thumbnails';
 import { traceLink, type TestDevice, type Trace } from '@/lib/linkTest';
+import { readSheet } from '@/lib/sheet';
+import { IMPORT_COLUMNS, columnKey, parseBool, visibilityOf, type ImportCol } from '@/lib/offerImport';
 
 const VISIBILITIES = Object.keys(VISIBILITY) as Visibility[];
 
@@ -49,7 +51,12 @@ function oneOf<T extends string>(v: string, allowed: readonly T[]): T {
   return v as T;
 }
 function httpURL(v: string): string {
-  const u = new URL(v);
+  let u: URL;
+  try {
+    u = new URL(v);
+  } catch {
+    throw new Error(v ? `"${v.slice(0, 80)}" isn't a valid URL. It must start with http:// or https://` : 'A URL is required.');
+  }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('URL must start with http:// or https://');
   return v;
 }
@@ -341,6 +348,49 @@ function targeting(fd: FormData, oid: number) {
   };
 }
 
+/** Every editable offer field from the edit form (or an import row), validated; throws readable errors. */
+function offerFromForm(fd: FormData, oid: number): OfferEdit {
+  const days = Number(str(fd, 'attribution_days') || 30);
+  if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error('Attribution window must be 1–365 days.');
+  const auto = str(fd, 'auto_approve_days');
+  if (auto && !/^\d{1,3}$/.test(auto)) throw new Error('Auto-approve days must be a whole number.');
+  const param = str(fd, 'deeplink_param') || 'click_id';
+  if (!/^[A-Za-z0-9_]{1,32}$/.test(param)) throw new Error('Deep-link parameter: letters, numbers and _ only.');
+  const pct = (k: string) => {
+    const v = optNum(fd, k);
+    if (v && Number(v) > 100) throw new Error('Percentages must be 100 or less.');
+    return v;
+  };
+  const next: OfferEdit = {
+    name: str(fd, 'name').slice(0, 200) || (() => { throw new Error('Name is required.'); })(),
+    destination_url: httpURL(str(fd, 'destination_url')),
+    ...offerInfo(fd),
+    payout_model: oneOf(str(fd, 'payout_model'), ['CPA', 'CPS', 'CPL', 'CPI'] as const),
+    attribution_days: days,
+    default_revenue: optNum(fd, 'default_revenue') ?? '0',
+    default_payout: optNum(fd, 'default_payout') ?? '0',
+    revenue_percent: pct('revenue_percent'),
+    payout_percent: pct('payout_percent'),
+    deeplink_enabled: fd.get('deeplink_enabled') ? 1 : 0,
+    deeplink_param: param,
+    auto_approve_days: auto ? Number(auto) : null,
+    ...targeting(fd, oid),
+  };
+  if (next.require_terms && !next.terms) throw new Error('Enter the terms publishers must accept, or untick "must accept".');
+  return next;
+}
+
+/** Fields that differ, as before → after. Numbers compare as numbers ("40.00" vs "40"), everything else as text. */
+function offerChanges(cur: Record<string, unknown>, next: Record<string, unknown>, fields: readonly string[] = OFFER_FIELDS) {
+  const same = (a: unknown, b: unknown) =>
+    a === null || a === undefined || b === null || b === undefined ? (a ?? null) === (b ?? null)
+    : !isNaN(Number(a)) && !isNaN(Number(b)) && String(a).trim() !== '' ? Number(a) === Number(b)
+    : String(a) === String(b);
+  const changes: Record<string, [unknown, unknown]> = {};
+  for (const f of fields) if (!same(cur[f], next[f])) changes[f] = [cur[f], next[f]];
+  return changes;
+}
+
 /** Saves the offer edit form; every changed field goes to the audit log as before → after. */
 export async function updateOffer(_: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
   const me = await requireAdmin();
@@ -350,44 +400,12 @@ export async function updateOffer(_: { ok?: string; error?: string } | null, fd:
 
   let next: OfferEdit;
   try {
-    const days = Number(str(fd, 'attribution_days') || 30);
-    if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error('Attribution window must be 1–365 days.');
-    const auto = str(fd, 'auto_approve_days');
-    if (auto && !/^\d{1,3}$/.test(auto)) throw new Error('Auto-approve days must be a whole number.');
-    const param = str(fd, 'deeplink_param') || 'click_id';
-    if (!/^[A-Za-z0-9_]{1,32}$/.test(param)) throw new Error('Deep-link parameter: letters, numbers and _ only.');
-    const pct = (k: string) => {
-      const v = optNum(fd, k);
-      if (v && Number(v) > 100) throw new Error('Percentages must be 100 or less.');
-      return v;
-    };
-    next = {
-      name: str(fd, 'name') || (() => { throw new Error('Name is required.'); })(),
-      destination_url: httpURL(str(fd, 'destination_url')),
-      ...offerInfo(fd),
-      payout_model: oneOf(str(fd, 'payout_model'), ['CPA', 'CPS', 'CPL', 'CPI'] as const),
-      attribution_days: days,
-      default_revenue: optNum(fd, 'default_revenue') ?? '0',
-      default_payout: optNum(fd, 'default_payout') ?? '0',
-      revenue_percent: pct('revenue_percent'),
-      payout_percent: pct('payout_percent'),
-      deeplink_enabled: fd.get('deeplink_enabled') ? 1 : 0,
-      deeplink_param: param,
-      auto_approve_days: auto ? Number(auto) : null,
-      ...targeting(fd, oid),
-    };
-    if (next.require_terms && !next.terms) throw new Error('Enter the terms publishers must accept, or untick "must accept".');
+    next = offerFromForm(fd, oid);
   } catch (e) {
     return { error: (e as Error).message };
   }
 
-  // Compare numbers as numbers ("40.00" vs "40") and everything else as text.
-  const same = (a: unknown, b: unknown) =>
-    a === null || a === undefined || b === null || b === undefined ? (a ?? null) === (b ?? null)
-    : !isNaN(Number(a)) && !isNaN(Number(b)) && String(a).trim() !== '' ? Number(a) === Number(b)
-    : String(a) === String(b);
-  const changes: Record<string, [unknown, unknown]> = {};
-  for (const f of OFFER_FIELDS) if (!same(cur[f], next[f])) changes[f] = [cur[f], next[f]];
+  const changes = offerChanges(cur, next);
   if (Object.keys(changes).length === 0) return { ok: 'No changes.' };
 
   await exec(
@@ -808,4 +826,195 @@ export async function recordPayment(fd: FormData) {
   );
   await audit(me, 'record_payment', 'publisher', pid, { payment_id: res.insertId, amount });
   revalidatePath('/admin', 'layout');
+}
+
+// ---------- Offer import (CSV / Excel) ----------
+
+export type ImportRow = {
+  row: number; action: 'create' | 'update' | 'unchanged' | 'error'; id?: number; name: string;
+  changes?: string[]; error?: string;
+};
+export type ImportState = { error?: string; mode?: 'preview' | 'import'; rows?: ImportRow[]; summary?: string } | null;
+
+const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+const MAX_IMPORT_ROWS = 1000;
+const MULTI_ALLOWED: Record<string, readonly string[]> = {
+  devices: ['mobile', 'tablet', 'desktop'], os_targets: Object.keys(OS_TARGETS), blocked_sources: RESTRICTABLE,
+};
+const IMPORT_FIELDS = [...OFFER_FIELDS, 'advertiser_id', 'visibility', 'status'] as const;
+const COLUMN_OF: Record<string, string> = Object.fromEntries(
+  IMPORT_COLUMNS.map((c) => [c.field ?? (c.key === 'advertiser' ? 'advertiser_id' : c.key), c.key]),
+);
+
+/** Puts one sheet cell into the offer form, the way the Edit form would send it. */
+function setField(f: FormData, c: ImportCol, v: string) {
+  const field = c.field!;
+  f.delete(field);
+  if (c.kind === 'bool') {
+    const b = parseBool(v);
+    if (b === null) throw new Error(`${c.key}: use yes or no (got "${v}").`);
+    if (b) f.set(field, 'on');
+  } else if (c.kind === 'multi') {
+    for (const x of v.toLowerCase().split(/[\s,;|]+/).filter(Boolean)) {
+      if (!MULTI_ALLOWED[field].includes(x)) throw new Error(`${c.key}: "${x}" isn't valid. Use ${MULTI_ALLOWED[field].join(', ')}.`);
+      f.append(field, x);
+    }
+  } else f.set(field, v);
+}
+
+/**
+ * Bulk create/update offers from a CSV or .xlsx file. mode=preview only checks;
+ * mode=import saves the valid rows and skips the rest. Rows with an existing id
+ * update that offer, and only the columns present in the file change.
+ */
+export async function importOffers(_: ImportState, fd: FormData): Promise<ImportState> {
+  const me = await requireAdmin();
+  const mode = str(fd, 'mode') === 'import' ? 'import' : 'preview';
+  const file = fd.get('file');
+  if (!(file instanceof File) || file.size === 0) return { error: 'Choose a .csv or .xlsx file.' };
+  if (file.size > MAX_IMPORT_BYTES) return { error: 'The file is larger than 2 MB. Split it into smaller files.' };
+  let sheet: string[][];
+  try {
+    sheet = readSheet(Buffer.from(await file.arrayBuffer()));
+  } catch (e) {
+    return { error: (e as Error).message || 'Could not read the file.' };
+  }
+  if (sheet.length < 2) return { error: 'The file has no offers below the header row.' };
+  if (sheet.length - 1 > MAX_IMPORT_ROWS) return { error: `Up to ${MAX_IMPORT_ROWS} offers per file; this one has ${sheet.length - 1}. Split it.` };
+
+  const keys = sheet[0].map(columnKey);
+  const unknown = sheet[0].filter((h, i) => !keys[i] && h.trim());
+  if (unknown.length) return { error: `Unknown column${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. Download the template to see the column names.` };
+  const dup = keys.find((k, i) => k && keys.indexOf(k) !== i);
+  if (dup) return { error: `The column "${dup}" appears twice.` };
+  const has = (k: string) => keys.includes(k);
+  if (!has('id') && !['name', 'advertiser', 'destination_url'].every(has)) {
+    return { error: 'To create offers the file needs the columns name, advertiser and destination_url. To update offers it needs an id column.' };
+  }
+
+  const body = sheet.slice(1);
+  const idCol = keys.indexOf('id');
+  const ids = idCol < 0 ? [] : [...new Set(body.map((r) => r[idCol].trim()).filter((v) => /^\d{1,18}$/.test(v)))];
+  type Cur = Record<string, unknown> & { id: number };
+  const [advertisers, current] = await Promise.all([
+    q<{ id: number; name: string; email: string | null }>(`SELECT id, name, email FROM advertisers`),
+    ids.length
+      ? q<Cur>(`SELECT id, ${IMPORT_FIELDS.join(', ')} FROM offers WHERE id IN (${ids.map(() => '?').join(', ')})`, ids)
+      : Promise.resolve([] as Cur[]),
+  ]);
+  const byId = new Map(current.map((o) => [Number(o.id), o]));
+
+  const advertiserId = (v: string): number => {
+    if (/^\d+$/.test(v)) {
+      const a = advertisers.find((x) => Number(x.id) === Number(v));
+      if (!a) throw new Error(`Advertiser #${v} doesn't exist.`);
+      return Number(a.id);
+    }
+    const lc = v.toLowerCase();
+    const byEmail = advertisers.filter((a) => a.email?.toLowerCase() === lc);
+    if (byEmail.length === 1) return Number(byEmail[0].id);
+    const byName = advertisers.filter((a) => a.name.trim().toLowerCase() === lc);
+    if (byName.length === 1) return Number(byName[0].id);
+    if (byName.length > 1) throw new Error(`Several advertisers are called "${v}". Use the advertiser ID or email.`);
+    throw new Error(`Advertiser "${v}" not found. Add them under Advertisers first.`);
+  };
+
+  type Plan = { result: ImportRow; values: Record<string, unknown>; changes: Record<string, [unknown, unknown]> };
+  const plans: Plan[] = [];
+  const results: ImportRow[] = [];
+  const seen = new Set<number>();
+  body.forEach((cells, i) => {
+    const cell = (k: string) => { const at = keys.indexOf(k); return at < 0 ? undefined : cells[at].trim(); };
+    const result: ImportRow = { row: i + 2, action: 'error', name: cell('name') || '' };
+    results.push(result);
+    try {
+      const idCell = cell('id') ?? '';
+      let cur: Cur | undefined;
+      if (idCell) {
+        if (!/^\d{1,18}$/.test(idCell)) throw new Error(`id "${idCell}" isn't a number. Leave it empty to create a new offer.`);
+        cur = byId.get(Number(idCell));
+        if (!cur) throw new Error(`Offer #${idCell} doesn't exist. Leave id empty to create a new offer.`);
+        if (seen.has(Number(idCell))) throw new Error(`Offer #${idCell} appears more than once in the file.`);
+        seen.add(Number(idCell));
+        result.id = Number(idCell);
+        result.name ||= String(cur.name);
+      }
+
+      // Start from the offer as it is (or the new-offer defaults), then apply the file's columns.
+      const f = new FormData();
+      f.set('payout_model', 'CPA');
+      for (const c of IMPORT_COLUMNS) {
+        if (!c.field) continue;
+        if (cur) {
+          const v = cur[c.field];
+          setField(f, c, c.kind === 'bool' ? (Number(v) ? 'yes' : 'no') : v === null || v === undefined ? '' : String(v));
+        }
+        const v = cell(c.key);
+        if (v !== undefined) setField(f, c, c.key === 'payout_model' ? v.toUpperCase() : v);
+      }
+      const values: Record<string, unknown> = offerFromForm(f, cur ? Number(cur.id) : 0);
+
+      const adv = cell('advertiser');
+      if (adv) values.advertiser_id = advertiserId(adv);
+      else if (cur) values.advertiser_id = cur.advertiser_id;
+      else throw new Error('advertiser is required for a new offer.');
+
+      const vis = cell('visibility');
+      values.visibility = vis ? visibilityOf(vis) ?? (() => { throw new Error(`visibility: use open, public or private (got "${vis}").`); })()
+        : cur?.visibility ?? 'public';
+      const st = (cell('status') ?? '').toLowerCase();
+      const allowed = cur ? ['active', 'paused', 'archived', String(cur.status)] : ['active', 'paused'];
+      if (st && !allowed.includes(st)) throw new Error(`status: use ${cur ? 'active, paused or archived' : 'active or paused'} (got "${st}").`);
+      values.status = st || cur?.status || 'active';
+
+      const changes = cur ? offerChanges(cur, values, IMPORT_FIELDS) : {};
+      result.action = !cur ? 'create' : Object.keys(changes).length ? 'update' : 'unchanged';
+      result.changes = Object.entries(changes).map(([k, [a, b]]) => `${COLUMN_OF[k] ?? k}: ${a ?? '–'} → ${b ?? '–'}`);
+      plans.push({ result, values, changes });
+    } catch (e) {
+      result.error = (e as Error).message;
+    }
+  });
+
+  const count = (a: ImportRow['action']) => results.filter((r) => r.action === a).length;
+  if (mode === 'preview') {
+    return {
+      mode, rows: results,
+      summary: `${count('create')} new, ${count('update')} to update, ${count('unchanged')} unchanged, ${count('error')} with errors.`,
+    };
+  }
+
+  const autoDays = await defaultAutoApprove();
+  for (const p of plans) {
+    try {
+      if (p.result.action === 'create') {
+        const vals = IMPORT_FIELDS.map((c) => (c === 'auto_approve_days' ? p.values[c] ?? autoDays : p.values[c]) as string | number | null);
+        const res = await exec(`INSERT INTO offers (${IMPORT_FIELDS.join(', ')}) VALUES (${IMPORT_FIELDS.map(() => '?').join(', ')})`, vals);
+        p.result.id = res.insertId;
+        await audit(me, 'create', 'offer', res.insertId, { via: 'import' });
+      } else if (p.result.action === 'update') {
+        const oid = p.result.id!;
+        const fields = Object.keys(p.changes);
+        await exec(
+          `UPDATE offers SET ${fields.map((f) => `${f} = ?`).join(', ')}, updated_at = NOW(3) WHERE id = ?`,
+          [...fields.map((f) => p.values[f] as string | number | null), oid],
+        );
+        await audit(me, 'edit', 'offer', oid, { changes: p.changes, via: 'import' });
+        if (p.changes.visibility && p.values.visibility === 'open') await approveWaiting(oid);
+      }
+    } catch (e) {
+      console.error('import offer row', p.result.row, e);
+      p.result.action = 'error';
+      p.result.error = 'Could not save this row. Check the server log.';
+    }
+  }
+  const summary = { created: count('create'), updated: count('update'), unchanged: count('unchanged'), skipped: count('error') };
+  await audit(me, 'import_offers', 'offer', null, summary);
+  clearLinkCache();
+  clearCapsCache();
+  revalidatePath('/admin', 'layout');
+  return {
+    mode, rows: results,
+    summary: `Created ${summary.created}, updated ${summary.updated}, unchanged ${summary.unchanged}, skipped ${summary.skipped}.`,
+  };
 }
