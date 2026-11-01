@@ -522,4 +522,11 @@ export const migrations: { version: number; statements: string[] }[] = [
          ADD COLUMN notes TEXT NULL`,
     ],
   },
+  {
+    version: 14,
+    statements: [
+      // Domains ?redirection_url= may send visitors to, besides the offer's own.
+      `ALTER TABLE offers ADD COLUMN redirect_domains VARCHAR(500) NULL`,
+    ],
+  },
 ];

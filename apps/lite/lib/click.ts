@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { offerUsage } from './caps';
 import { newClickId } from './clickid';
 import { exec, q } from './db';
-import { deepLinkTarget } from './deeplink';
+import { deepLinkTarget, redirectTarget } from './deeplink';
 import { deviceOf, osOf } from './device';
 import { LINK_TEST_HEADER, isLinkTest } from './linkTestToken';
 import { countryOf } from './geo';
@@ -102,7 +102,11 @@ async function redirectTo(req: NextRequest, link: Link, v: Visitor, subs: SubVal
   const url = sp.get('url');
   // Deep link (?url=…): only to the offer's own site, and only if allowed.
   const deep = link.deeplinkEnabled && url ? deepLinkTarget(url, link.destination, link.deeplinkParam, clickId) : null;
-  const res = finish(deep ?? expand(lp?.url ?? link.destination, macroValues(link, clickId, subs)));
+  // Google Ads tracking template (?redirection_url={lpurl}): allowed domains only; force_transparent leaves the URL untouched.
+  const redirect = link.googleAdsAllowed ? sp.get('redirection_url') : null;
+  const transparent = ['true', '1'].includes(sp.get('force_transparent') ?? '');
+  const target = redirect ? redirectTarget(redirect, link.destination, link.redirectDomains, link.deeplinkParam, clickId, transparent) : null;
+  const res = finish(target ?? deep ?? expand(lp?.url ?? link.destination, macroValues(link, clickId, subs)));
   setClickCookie(res, link, clickId);
   return res;
 }

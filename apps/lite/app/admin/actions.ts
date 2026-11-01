@@ -24,6 +24,7 @@ import { RESTRICTABLE } from '@/lib/sourceLabels';
 import { OS_TARGETS, VISIBILITY, type Visibility } from '@/lib/offerInfo';
 import { removeThumbnail, saveThumbnail } from '@/lib/thumbnails';
 import { traceLink, type TestDevice, type Trace } from '@/lib/linkTest';
+import { parseDomains } from '@/lib/deeplink';
 import { readSheet } from '@/lib/sheet';
 import { IMPORT_COLUMNS, columnKey, parseBool, visibilityOf, type ImportCol } from '@/lib/offerImport';
 
@@ -316,7 +317,7 @@ const OFFER_FIELDS = [
   'name', 'destination_url', 'description', 'payout_model', 'attribution_days', 'default_revenue', 'default_payout',
   'revenue_percent', 'payout_percent', 'deeplink_enabled', 'deeplink_param', 'auto_approve_days',
   'countries', 'devices', 'daily_cap', 'monthly_cap', 'daily_budget', 'fallback_offer_id', 'fallback_url', 'blocked_sources',
-  'os_targets', 'kpi', 'preview_url', 'category', 'terms', 'require_terms',
+  'os_targets', 'kpi', 'preview_url', 'category', 'terms', 'require_terms', 'redirect_domains',
 ] as const;
 type OfferEdit = Record<(typeof OFFER_FIELDS)[number], string | number | null>;
 
@@ -373,6 +374,7 @@ function offerFromForm(fd: FormData, oid: number): OfferEdit {
     payout_percent: pct('payout_percent'),
     deeplink_enabled: fd.get('deeplink_enabled') ? 1 : 0,
     deeplink_param: param,
+    redirect_domains: parseDomains(str(fd, 'redirect_domains')),
     auto_approve_days: auto ? Number(auto) : null,
     ...targeting(fd, oid),
   };
