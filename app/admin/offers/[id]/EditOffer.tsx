@@ -8,7 +8,7 @@ import { updateOffer } from '../../actions';
 export type EditableOffer = {
   id: number; name: string; destination_url: string; description: string | null; payout_model: string;
   attribution_days: number; default_revenue: string; default_payout: string; revenue_percent: string | null;
-  payout_percent: string | null; deeplink_enabled: number; deeplink_param: string; auto_approve_days: number | null;
+  payout_percent: string | null; deeplink_enabled: number; deeplink_param: string; redirect_domains: string | null; auto_approve_days: number | null;
   countries: string | null; devices: string | null; daily_cap: number | null; monthly_cap: number | null;
   daily_budget: string | null; fallback_offer_id: number | null; fallback_url: string | null;
   blocked_sources: string | null; os_targets: string | null;
@@ -92,6 +92,11 @@ export function EditOffer({ o, otherOffers }: { o: EditableOffer; otherOffers: {
           <label className="check"><input type="checkbox" name="deeplink_enabled" defaultChecked={!!o.deeplink_enabled} /> Allow deep links (publishers may link to any page on the landing domain)</label>
           <label>Deep-link click ID parameter<input name="deeplink_param" defaultValue={o.deeplink_param} maxLength={32} /></label>
         </div>
+        <h3>Google Ads links</h3>
+        <label>Google Ads allowed domains
+          <input name="redirect_domains" defaultValue={o.redirect_domains ?? ''} maxLength={500} placeholder="e.g. go.sjv.io, xteink.com" />
+          <span className="hint">Where <code>redirection_url</code> may send visitors, besides the offer&apos;s own domain. Subdomains are included. Other domains go to the normal offer URL.</span>
+        </label>
         <h3>For publishers</h3>
         <OfferInfoFields o={o} />
         <p className="muted">Price changes apply to new conversions only; existing conversions keep the price they were recorded with.</p>

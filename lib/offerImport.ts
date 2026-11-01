@@ -40,6 +40,7 @@ export const IMPORT_COLUMNS: ImportCol[] = [
   { key: 'require_terms', field: 'require_terms', kind: 'bool', help: 'yes / no: publishers must accept the terms.', example: 'no' },
   { key: 'deeplink_enabled', field: 'deeplink_enabled', kind: 'bool', help: 'yes / no: allow deep links.', example: 'no' },
   { key: 'deeplink_param', field: 'deeplink_param', kind: 'text', help: 'Deep-link parameter (default click_id).', example: '' },
+  { key: 'redirect_domains', field: 'redirect_domains', kind: 'text', help: 'Extra domains Google Ads links may go to, e.g. go.sjv.io.', example: '' },
   { key: 'visibility', field: null, kind: 'text', help: 'open (instant link), public (approval required) or private.', example: 'public' },
   { key: 'status', field: null, kind: 'text', help: 'active or paused (archived only for existing offers).', example: 'active' },
 ];

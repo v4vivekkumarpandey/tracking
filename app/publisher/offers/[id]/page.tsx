@@ -25,13 +25,13 @@ export default async function PublisherOffer({ params, searchParams }: {
   const [o] = await q<{
     id: number; name: string; description: string | null; payout_model: string; attribution_days: number;
     default_payout: string; payout_percent: string | null; payout_override: string | null; access: string | null; code: string | null;
-    deeplink_enabled: number; destination_url: string; visibility: string;
+    deeplink_enabled: number; redirect_domains: string | null; destination_url: string; visibility: string;
     countries: string | null; devices: string | null; os_targets: string | null; daily_cap: number | null; monthly_cap: number | null; blocked_sources: string | null;
     kpi: string | null; preview_url: string | null; category: string | null; terms: string | null; require_terms: number;
     thumb_key: string | null; thumb_mime: string | null;
   }>(
     `SELECT o.id, o.name, o.description, o.payout_model, o.attribution_days, o.default_payout, o.payout_percent,
-            o.deeplink_enabled, o.destination_url, o.visibility, o.countries, o.devices, o.os_targets, o.daily_cap, o.monthly_cap, o.blocked_sources,
+            o.deeplink_enabled, o.redirect_domains, o.destination_url, o.visibility, o.countries, o.devices, o.os_targets, o.daily_cap, o.monthly_cap, o.blocked_sources,
             o.kpi, o.preview_url, o.category, o.terms, o.require_terms, o.thumb_key, o.thumb_mime,
             a.payout_override, a.status AS access, l.code
      FROM offers o
@@ -95,6 +95,8 @@ export default async function PublisherOffer({ params, searchParams }: {
         <>
           <LinkBuilder path={link} domains={domainOptions}
             deeplinkHost={o.deeplink_enabled ? landingHost(o.destination_url) : null}
+            googleAdsDomains={(o.blocked_sources ?? '').split(',').includes('google_ads') ? null
+              : [landingHost(o.destination_url) ?? '', ...(o.redirect_domains ?? '').split(',')].filter(Boolean)}
             landings={[{ id: 0, name: 'Default', preview: preview(o.destination_url) },
               ...landings.map((l) => ({ id: Number(l.id), name: l.name, preview: preview(l.url) }))]} />
           <CreativesGallery creatives={creatives} link={`${trackingBase()}${link}`} />
