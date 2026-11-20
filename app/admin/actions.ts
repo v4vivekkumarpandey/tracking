@@ -187,35 +187,62 @@ function offerInfo(fd: FormData) {
   };
 }
 
-export async function createOffer(fd: FormData) {
+// Returns the error instead of throwing: in production a thrown message is replaced by a generic crash page.
+export async function createOffer(_: FormResult, fd: FormData): Promise<FormResult> {
   const me = await requireAdmin();
-  const days = Number(str(fd, 'attribution_days') || 30);
-  if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error('attribution days must be 1-365');
-  const info = offerInfo(fd);
-  if (info.require_terms && !info.terms) throw new Error('Enter the terms publishers must accept, or untick "must accept".');
-  const res = await exec(
-    `INSERT INTO offers (advertiser_id, name, description, destination_url, payout_model,
-       default_revenue, default_payout, revenue_percent, payout_percent, attribution_days, auto_approve_days,
-       kpi, preview_url, category, terms, require_terms, visibility)
-     VALUES (?, ?, ?, ?, ?, COALESCE(?, 0), COALESCE(?, 0), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
+  let params: (string | number | null)[];
+  try {
+    const name = str(fd, 'name');
+    if (!name) return { error: 'Enter the offer name.' };
+    const days = Number(str(fd, 'attribution_days') || 30);
+    if (!Number.isInteger(days) || days < 1 || days > 365) return { error: 'Attribution window must be 1–365 days.' };
+    const info = offerInfo(fd);
+    if (info.require_terms && !info.terms) return { error: 'Enter the terms publishers must accept, or untick "must accept".' };
+    const money = (k: string, label: string) => {
+      const v = str(fd, k).replace(/[$,%\s]/g, '');
+      if (!v) return null;
+      if (!/^\d+(\.\d{1,2})?$/.test(v)) throw new Error(`${label} must be a number like 32 or 7.5.`);
+      return v;
+    };
+    const pct = (k: string, label: string) => {
+      const v = money(k, label);
+      if (v !== null && Number(v) > 100) throw new Error(`${label} can't be above 100.`);
+      return v;
+    };
+    params = [
       id(fd, 'advertiser_id'),
-      str(fd, 'name'),
+      name.slice(0, 200),
       info.description,
       httpURL(str(fd, 'destination_url')),
       oneOf(str(fd, 'payout_model'), ['CPA', 'CPS', 'CPL', 'CPI'] as const),
-      optNum(fd, 'default_revenue'),
-      optNum(fd, 'default_payout'),
-      optNum(fd, 'revenue_percent'),
-      optNum(fd, 'payout_percent'),
+      money('default_revenue', 'Revenue'),
+      money('default_payout', 'Payout'),
+      pct('revenue_percent', 'Revenue %'),
+      pct('payout_percent', 'Payout %'),
       days,
       await defaultAutoApprove(),
       info.kpi, info.preview_url, info.category, info.terms, info.require_terms,
       oneOf(str(fd, 'visibility') || 'public', VISIBILITIES),
-    ],
-  );
-  await audit(me, 'create', 'offer', res.insertId);
-  redirect(`/admin/offers/${res.insertId}`);
+    ];
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+  let offerId: number;
+  try {
+    const res = await exec(
+      `INSERT INTO offers (advertiser_id, name, description, destination_url, payout_model,
+         default_revenue, default_payout, revenue_percent, payout_percent, attribution_days, auto_approve_days,
+         kpi, preview_url, category, terms, require_terms, visibility)
+       VALUES (?, ?, ?, ?, ?, COALESCE(?, 0), COALESCE(?, 0), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      params,
+    );
+    offerId = res.insertId;
+  } catch (err) {
+    console.error('create offer', err);
+    return { error: 'Could not save the offer. Check the values and try again.' };
+  }
+  await audit(me, 'create', 'offer', offerId);
+  redirect(`/admin/offers/${offerId}`);
 }
 
 export async function setOfferStatus(fd: FormData) {

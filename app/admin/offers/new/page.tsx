@@ -5,6 +5,7 @@ import { CURRENCY } from '@/lib/format';
 import { VISIBILITY } from '@/lib/offerInfo';
 import { createOffer } from '../../actions';
 import { OfferInfoFields } from '../../../_components/OfferInfoFields';
+import { ActionForm } from '../../../_components/ActionForm';
 
 export default async function NewOffer() {
   await requireAdmin();
@@ -22,7 +23,7 @@ export default async function NewOffer() {
           Add an advertiser first. <Link href="/admin/advertisers">Go to Advertisers</Link>.
         </div>
       ) : (
-        <form action={createOffer} className="card stack">
+        <ActionForm action={createOffer} submit="Create offer">
           <h2>Basics</h2>
           <div className="grid2">
             <label>Offer name<input name="name" required maxLength={200} placeholder="Brand – Product – Country" /></label>
@@ -65,12 +66,7 @@ export default async function NewOffer() {
               {Object.entries(VISIBILITY).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
             </select>
           </label>
-
-          <div className="row">
-            <button type="submit">Create offer</button>
-            <Link href="/admin/offers">Cancel</Link>
-          </div>
-        </form>
+        </ActionForm>
       )}
     </>
   );
